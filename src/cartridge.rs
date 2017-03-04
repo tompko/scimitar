@@ -20,6 +20,7 @@ impl Cartridge {
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
+        println!("Read cartridge: {:04x}", addr);
         self.bytes[addr as usize]
     }
 }
