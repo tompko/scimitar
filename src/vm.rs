@@ -1,6 +1,5 @@
 use interconnect::Interconnect;
 use cpu::Cpu;
-use cartridge::Cartridge;
 
 pub struct VM<T: Interconnect> {
     cpu: Cpu,

@@ -90,8 +90,7 @@ impl MockInterconnect {
 
 impl Interconnect for MockInterconnect {
     fn read_byte(&self, addr: u16) -> u8 {
-        let val = *self.memory.get(&addr).unwrap_or(&0);
-        val
+        *self.memory.get(&addr).unwrap_or(&0)
     }
 
     fn read_halfword(&self, addr: u16) -> u16 {

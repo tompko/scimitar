@@ -18,10 +18,8 @@ impl Cartridge {
     pub fn from_bytes(bytes: &[u8]) -> Cartridge {
         let bytes_copy = bytes.to_vec();
 
-        let mut bytes_box = bytes_copy.into_boxed_slice();
-
         Cartridge{
-            bytes: bytes_box,
+            bytes: bytes_copy.into_boxed_slice(),
         }
     }
 

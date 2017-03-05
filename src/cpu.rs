@@ -74,6 +74,7 @@ static CYCLE_COUNTS: [u16; 256] = [
     12, 12,  8,  4,  0, 16,  8, 16, 12,  8, 16,  4,  0,  0,  8, 16
 ];
 
+#[allow(dead_code)] // TODO - remove once CB instructions are implemented
 static CB_CYCLE_COUNTS: [u16; 256] = [
      8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
      8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
@@ -120,14 +121,13 @@ impl Cpu {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
         let instr = self.read_pc_byte(interconnect);
         let cycle_count = CYCLE_COUNTS[instr as usize];
 
         match instr {
-            0x00 => {
-                // NOP - No Operation
-            }
+            0x00 => {} // NOP - No Operation
             0x01 => {
                 // LD BC, nn
                 let lsb = self.read_pc_byte(interconnect);
@@ -453,5 +453,11 @@ impl Cpu {
 
     pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) | (self.l as u16)
+    }
+}
+
+impl Default for Cpu {
+    fn default() -> Self {
+        Self::new()
     }
 }
