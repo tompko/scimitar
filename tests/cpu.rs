@@ -223,6 +223,13 @@ fn cpu_ld_c_n() {
     assert_eq!(cycles, 24);
     assert_eq!(cpu.c, 0x52);
     assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD C, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x4f], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.c, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 3);
 }
 
 #[test]
@@ -281,6 +288,13 @@ fn cpu_ld_d_n() {
     assert_eq!(cycles, 24);
     assert_eq!(cpu.d, 0x50);
     assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD D, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x57], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.d, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 3);
 }
 
 #[test]
@@ -339,6 +353,13 @@ fn cpu_ld_e_n() {
     assert_eq!(cycles, 24);
     assert_eq!(cpu.e, 0x50);
     assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD E, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x5f], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.e, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 3);
 }
 
 #[test]
@@ -398,6 +419,13 @@ fn cpu_ld_h_n() {
     assert_eq!(cycles, 24);
     assert_eq!(cpu.h, 0x50);
     assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD H, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x67], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.h, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 3);
 }
 
 #[test]
@@ -456,6 +484,104 @@ fn cpu_ld_l_n() {
     assert_eq!(cycles, 24);
     assert_eq!(cpu.l, 0x50);
     assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD L, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x6f], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.l, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 3);
+}
+
+#[test]
+fn cpu_ld_nn_a() {
+    // LD (BC), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x06, 0xd0, 0x0e, 0x01, 0x3e, 0x42, 0x02], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(inter.read_byte(0xd001), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // LD (DE), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x16, 0xd0, 0x1e, 0x01, 0x3e, 0x42, 0x12], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(inter.read_byte(0xd001), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // LD (HL), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x01, 0x3e, 0x42, 0x77], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(inter.read_byte(0xd001), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // LD (nn), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x3e, 0x42, 0xea, 0x01, 0xd0], 2);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(inter.read_byte(0xd001), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD A, (C)
+    let (cpu, inter, cycles) = run_cpu_test(&[0x3e, 0x42, 0x0e, 0x01, 0xe2], 3);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(inter.read_byte(0xff01), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // LD (C), A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0x0e, 0x01, 0xe2, 0x3e, 0x00, 0xf2], 5);
+
+    assert_eq!(cycles, 40);
+    assert_eq!(cpu.a, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 8);
+
+    // LDD A, (HL)
+    let (cpu, _, cycles) = run_cpu_test(&[0x26, 0xc0, 0x2e, 0x02, 0x3a], 3);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x52);
+    assert_eq!(cpu.pc, 0x100 + 5);
+    assert_eq!(cpu.hl(), 0xc001);
+
+    // LDD (HL), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xc0, 0x2e, 0x02, 0x3e, 0x42, 0x32], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(inter.read_byte(0xc002), 0x42);
+    assert_eq!(cpu.hl(), 0xc001);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // LDI A, (HL)
+    let (cpu, _, cycles) = run_cpu_test(&[0x26, 0xc0, 0x2e, 0x02, 0x2a], 3);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x52);
+    assert_eq!(cpu.pc, 0x100 + 5);
+    assert_eq!(cpu.hl(), 0xc003);
+
+    // LDI (HL), A
+    let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xc0, 0x2e, 0x02, 0x3e, 0x42, 0x22], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(inter.read_byte(0xc002), 0x42);
+    assert_eq!(cpu.hl(), 0xc003);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // LD A, (n)
+    let (cpu, inter, cycles) = run_cpu_test(&[0x3e, 0x42, 0xe0, 0x01], 2);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(inter.read_byte(0xff01), 0x42);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // LD (n), A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x42, 0xe0, 0x01, 0x3e, 0x00, 0xf0, 0x01], 4);
+
+    assert_eq!(cycles, 40);
+    assert_eq!(cpu.a, 0x42);
+    assert_eq!(cpu.pc, 0x100 + 8);
 }
 
 #[test]
@@ -474,14 +600,12 @@ fn cpu_ld_hl_n() {
     assert_eq!(inter.read_byte(0xd000), 0x42);
     assert_eq!(cpu.pc, 0x100 + 7);
 
-
     // LD (HL), D
     let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x00, 0x16, 0x42, 0x72], 4);
 
     assert_eq!(cycles, 32);
     assert_eq!(inter.read_byte(0xd000), 0x42);
     assert_eq!(cpu.pc, 0x100 + 7);
-
 
     // LD (HL), E
     let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x00, 0x1e, 0x42, 0x73], 4);
@@ -490,7 +614,6 @@ fn cpu_ld_hl_n() {
     assert_eq!(inter.read_byte(0xd000), 0x42);
     assert_eq!(cpu.pc, 0x100 + 7);
 
-
     // LD (HL), H
     let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x00, 0x74], 3);
 
@@ -498,14 +621,12 @@ fn cpu_ld_hl_n() {
     assert_eq!(inter.read_byte(0xd000), 0xd0);
     assert_eq!(cpu.pc, 0x100 + 5);
 
-
     // LD (HL), L
     let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x01, 0x75], 3);
 
     assert_eq!(cycles, 24);
     assert_eq!(inter.read_byte(0xd001), 0x01);
     assert_eq!(cpu.pc, 0x100 + 5);
-
 
     // LD (HL), n
     let (cpu, inter, cycles) = run_cpu_test(&[0x26, 0xd0, 0x2e, 0x00, 0x36, 0x42], 3);

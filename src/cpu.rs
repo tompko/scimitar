@@ -136,6 +136,7 @@ impl Cpu {
                 self.b = msb;
                 self.c = lsb;
             }
+            0x02 => interconnect.write_byte(self.bc(), self.a), // LD (BC), A
             0x06 => self.b = self.read_pc_byte(interconnect), // LD B,n
             0x0a => {
                 let addr = self.bc();
@@ -150,6 +151,7 @@ impl Cpu {
                 self.d = msb;
                 self.e = lsb;
             }
+            0x12 => interconnect.write_byte(self.de(), self.a), // LD (DE), A
             0x16 => self.d = self.read_pc_byte(interconnect), // LD D,n
             0x18 => {
                 // JR n - realtive jump by n
@@ -166,21 +168,30 @@ impl Cpu {
                 self.h = msb;
                 self.l = lsb;
             }
+            0x22 => {
+                // LDI (HL), A
+                interconnect.write_byte(self.hl(), self.a);
+                let val = self.hl().wrapping_add(1);
+
+                self.h = (val >> 8) as u8;
+                self.l = (val & 0xff) as u8;
+            }
             0x23 => {
                 // INC HL
                 let mut val = ((self.h as u16) << 8) | (self.l as u16);
                 val = val.wrapping_add(1);
+
                 self.h = (val >> 8) as u8;
                 self.l = (val & 0xff) as u8;
             }
             0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
-            0x2A => {
+            0x2a => {
                 // LDI A, (HL) - Load the value at address HL into A, increment HL
-                let mut addr = ((self.h as u16) << 8) | (self.l as u16);
-                self.a = interconnect.read_byte(addr);
-                addr = addr.wrapping_add(1);
-                self.h = (addr >> 8) as u8;
-                self.l = (addr & 0xff) as u8;
+                self.a = interconnect.read_byte(self.hl());
+                let val = self.hl().wrapping_add(1);
+
+                self.h = (val >> 8) as u8;
+                self.l = (val & 0xff) as u8;
             }
             0x2e => self.l = self.read_pc_byte(interconnect), // LD L,n
             0x31 => {
@@ -192,10 +203,25 @@ impl Cpu {
 
                 self.sp = val;
             }
+            0x32 => {
+                // LDD (HL), A
+                interconnect.write_byte(self.hl(), self.a);
+                let val = self.hl().wrapping_sub(1);
+
+                self.h = (val >> 8) as u8;
+                self.l = (val & 0xff) as u8;
+            }
             0x36 => {
                 let val = self.read_pc_byte(interconnect);
 
                 interconnect.write_byte(self.hl(), val);
+            }
+            0x3a => {
+                self.a = interconnect.read_byte(self.hl());
+                let val = self.hl().wrapping_sub(1);
+
+                self.h = (val >> 8) as u8;
+                self.l = (val & 0xff) as u8;
             }
             0x3c => {
                 self.f.h = (self.a & 0xf).wrapping_add(1) > 0xf;
@@ -218,6 +244,7 @@ impl Cpu {
             0x4c => self.c = self.h, // LD C, H
             0x4d => self.c = self.l, // LD C, L
             0x4e => self.c = interconnect.read_byte(self.hl()), // LD C, (HL)
+            0x4f => self.c = self.a, // LD C, A
             0x50 => self.d = self.b, // LD D, B
             0x51 => self.d = self.c, // LD D, C
             0x52 => {} // LD D, D
@@ -225,6 +252,7 @@ impl Cpu {
             0x54 => self.d = self.h, // LD D, H
             0x55 => self.d = self.l, // LD D, L
             0x56 => self.d = interconnect.read_byte(self.hl()), // LD D, (HL)
+            0x57 => self.d = self.a, // LD D, A
             0x58 => self.e = self.b, // LD E, B
             0x59 => self.e = self.c, // LD E, C
             0x5a => self.e = self.d, // LD E, D
@@ -232,6 +260,7 @@ impl Cpu {
             0x5c => self.e = self.h, // LD E, H
             0x5d => self.e = self.l, // LD E, L
             0x5e => self.e = interconnect.read_byte(self.hl()), // LD E, (HL)
+            0x5f => self.e = self.a, // LD E, A
             0x60 => self.h = self.b, // LD H, B
             0x61 => self.h = self.c, // LD H, C
             0x62 => self.h = self.d, // LD H, D
@@ -239,11 +268,13 @@ impl Cpu {
             0x64 => {}, // LD H, H
             0x65 => self.h = self.l, // LD H, L
             0x66 => self.h = interconnect.read_byte(self.hl()), // LD H, (HL)
+            0x67 => self.h = self.a, // LD H, A
             0x68 => self.l = self.b, // LD L, B
             0x69 => self.l = self.c, // LD L, C
             0x6a => self.l = self.d, // LD L, D
             0x6b => self.l = self.e, // LD L, E
             0x6c => self.l = self.h, // LD L, H
+            0x6f => self.l = self.a, // LD L, A
             0x6d => {}, // LD L, L
             0x6e => self.l = interconnect.read_byte(self.hl()), // LD L, (HL)
             0x70 => interconnect.write_byte(self.hl(), self.b), // LD (HL), B
@@ -252,6 +283,7 @@ impl Cpu {
             0x73 => interconnect.write_byte(self.hl(), self.e), // LD (HL), E
             0x74 => interconnect.write_byte(self.hl(), self.h), // LD (HL), H
             0x75 => interconnect.write_byte(self.hl(), self.l), // LD (HL), L
+            0x77 => interconnect.write_byte(self.hl(), self.a), // LD (HL), A
             0x78 => self.a = self.b, // LD A, B
             0x79 => self.a = self.c, // LD A, C
             0x7a => self.a = self.d, // LD A, D
@@ -294,8 +326,8 @@ impl Cpu {
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
                 let n = self.read_pc_byte(interconnect);
-
                 let addr = 0xff00 + (n as u16);
+
                 interconnect.write_byte(addr, self.a);
             }
             0xe1 => {
@@ -305,6 +337,11 @@ impl Cpu {
 
                 self.h = h;
                 self.l = l;
+            }
+            0xe2 => {
+                // LD (C), A
+                let addr = 0xff00 + (self.c as u16);
+                interconnect.write_byte(addr, self.a);
             }
             0xe5 => {
                 // PUSH HL
@@ -316,11 +353,14 @@ impl Cpu {
             }
             0xea => {
                 // LD nn, A - Store A to immediate address
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
-                let addr = ((msb as u16) << 8) | lsb as u16;
-
+                let addr = self.read_pc_halfword(interconnect);
                 interconnect.write_byte(addr, self.a);
+            }
+            0xf0 => {
+                let n = self.read_pc_byte(interconnect);
+                let addr = 0xff00 + (n as u16);
+
+                self.a = interconnect.read_byte(addr);
             }
             0xf1 => {
                 // POP AF
@@ -329,6 +369,10 @@ impl Cpu {
 
                 self.a = a;
                 self.f = f.into();
+            }
+            0xf2 => {
+                let addr = 0xff00 + (self.c as u16);
+                self.a = interconnect.read_byte(addr);
             }
             0xf3 => {
                 // DI -Disable interrupts after the next instruction is executed
