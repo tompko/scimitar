@@ -111,6 +111,6 @@ impl Interconnect for MockInterconnect {
         let msb = (val >> 8) as u8;
 
         self.write_byte(addr, lsb);
-        self.write_byte(addr + 1, lsb);
+        self.write_byte(addr + 1, msb);
     }
 }

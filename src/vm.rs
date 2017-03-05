@@ -26,7 +26,7 @@ impl<T: Interconnect> VM<T> {
         self.cpu.step(&mut self.inter)
     }
 
-    pub fn get_cpu(self) -> Cpu {
-        self.cpu
+    pub fn get_children(self) -> (Cpu, T) {
+        (self.cpu, self.inter)
     }
 }

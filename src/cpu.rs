@@ -122,7 +122,7 @@ impl Cpu {
 
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
         let instr = self.read_pc_byte(interconnect);
-        let mut cycle_count = CYCLE_COUNTS[instr as usize];
+        let cycle_count = CYCLE_COUNTS[instr as usize];
 
         match instr {
             0x00 => {
@@ -154,7 +154,6 @@ impl Cpu {
             0x18 => {
                 // JR n - realtive jump by n
                 let n = self.read_pc_byte(interconnect);
-                let old_pc = self.pc;
                 self.pc = self.pc.wrapping_add(n as i8 as u16);
             }
             0x1a => self.a = interconnect.read_byte(self.de()),
@@ -193,12 +192,66 @@ impl Cpu {
 
                 self.sp = val;
             }
+            0x36 => {
+                let val = self.read_pc_byte(interconnect);
+
+                interconnect.write_byte(self.hl(), val);
+            }
             0x3c => {
                 self.f.h = (self.a & 0xf).wrapping_add(1) > 0xf;
                 self.a = self.a.wrapping_add(1);
                 self.f.z = self.a == 0;
                 self.f.n = false;
             }
+            0x40 => {} // LD B, B
+            0x41 => self.b = self.c, // LD B, C
+            0x42 => self.b = self.d, // LD B, D
+            0x43 => self.b = self.e, // LD B, E
+            0x44 => self.b = self.h, // LD B, H
+            0x45 => self.b = self.l, // LD B, L
+            0x46 => self.b = interconnect.read_byte(self.hl()), // LD B, (HL)
+            0x47 => self.b = self.a, // LD B, A
+            0x48 => self.c = self.b, // LD C, B
+            0x49 => {} // LD C, C
+            0x4a => self.c = self.d, // LD C, D
+            0x4b => self.c = self.e, // LD C, E
+            0x4c => self.c = self.h, // LD C, H
+            0x4d => self.c = self.l, // LD C, L
+            0x4e => self.c = interconnect.read_byte(self.hl()), // LD C, (HL)
+            0x50 => self.d = self.b, // LD D, B
+            0x51 => self.d = self.c, // LD D, C
+            0x52 => {} // LD D, D
+            0x53 => self.d = self.e, // LD D, E
+            0x54 => self.d = self.h, // LD D, H
+            0x55 => self.d = self.l, // LD D, L
+            0x56 => self.d = interconnect.read_byte(self.hl()), // LD D, (HL)
+            0x58 => self.e = self.b, // LD E, B
+            0x59 => self.e = self.c, // LD E, C
+            0x5a => self.e = self.d, // LD E, D
+            0x5b => {}, // LD E, E
+            0x5c => self.e = self.h, // LD E, H
+            0x5d => self.e = self.l, // LD E, L
+            0x5e => self.e = interconnect.read_byte(self.hl()), // LD E, (HL)
+            0x60 => self.h = self.b, // LD H, B
+            0x61 => self.h = self.c, // LD H, C
+            0x62 => self.h = self.d, // LD H, D
+            0x63 => self.h = self.e, // LD H, E
+            0x64 => {}, // LD H, H
+            0x65 => self.h = self.l, // LD H, L
+            0x66 => self.h = interconnect.read_byte(self.hl()), // LD H, (HL)
+            0x68 => self.l = self.b, // LD L, B
+            0x69 => self.l = self.c, // LD L, C
+            0x6a => self.l = self.d, // LD L, D
+            0x6b => self.l = self.e, // LD L, E
+            0x6c => self.l = self.h, // LD L, H
+            0x6d => {}, // LD L, L
+            0x6e => self.l = interconnect.read_byte(self.hl()), // LD L, (HL)
+            0x70 => interconnect.write_byte(self.hl(), self.b), // LD (HL), B
+            0x71 => interconnect.write_byte(self.hl(), self.c), // LD (HL), C
+            0x72 => interconnect.write_byte(self.hl(), self.d), // LD (HL), D
+            0x73 => interconnect.write_byte(self.hl(), self.e), // LD (HL), E
+            0x74 => interconnect.write_byte(self.hl(), self.h), // LD (HL), H
+            0x75 => interconnect.write_byte(self.hl(), self.l), // LD (HL), L
             0x78 => self.a = self.b, // LD A, B
             0x79 => self.a = self.c, // LD A, C
             0x7a => self.a = self.d, // LD A, D
@@ -346,15 +399,15 @@ impl Cpu {
         interconnect.read_byte(self.sp)
     }
 
-    fn bc(&self) -> u16 {
+    pub fn bc(&self) -> u16 {
         ((self.b as u16) << 8) | (self.c as u16)
     }
 
-    fn de(&self) -> u16 {
+    pub fn de(&self) -> u16 {
         ((self.d as u16) << 8) | (self.e as u16)
     }
 
-    fn hl(&self) -> u16 {
+    pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) | (self.l as u16)
     }
 }
