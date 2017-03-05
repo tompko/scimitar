@@ -12,15 +12,20 @@ impl Cartridge {
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
 
-        let bytes_box = buffer.into_boxed_slice();
+        Ok(Cartridge::from_bytes(&buffer))
+    }
 
-        Ok(Cartridge{
+    pub fn from_bytes(bytes: &[u8]) -> Cartridge {
+        let bytes_copy = bytes.to_vec();
+
+        let mut bytes_box = bytes_copy.into_boxed_slice();
+
+        Cartridge{
             bytes: bytes_box,
-        })
+        }
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
-        println!("Read cartridge: {:04x}", addr);
         self.bytes[addr as usize]
     }
 }

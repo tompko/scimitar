@@ -1,25 +1,32 @@
-use super::interconnect::Interconnect;
-use super::cpu::Cpu;
+use interconnect::Interconnect;
+use cpu::Cpu;
 use cartridge::Cartridge;
 
-pub struct VM {
-    inter: Interconnect,
+pub struct VM<T: Interconnect> {
     cpu: Cpu,
+    inter: T,
 }
 
-impl VM {
-    pub fn new(cartridge: Cartridge) -> VM {
-        let inter = Interconnect::new(cartridge);
+impl<T: Interconnect> VM<T> {
+    pub fn new(interconnect: T) -> VM<T> {
         let cpu = Cpu::new();
         VM{
-            inter: inter,
+            inter: interconnect,
             cpu: cpu,
         }
     }
 
     pub fn run(&mut self) {
         loop {
-            self.cpu.step(&mut self.inter);
+            self.step();
         }
+    }
+
+    pub fn step(&mut self) -> u16 {
+        self.cpu.step(&mut self.inter)
+    }
+
+    pub fn get_cpu(self) -> Cpu {
+        self.cpu
     }
 }
