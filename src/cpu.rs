@@ -138,6 +138,12 @@ impl Cpu {
             }
             0x02 => interconnect.write_byte(self.bc(), self.a), // LD (BC), A
             0x06 => self.b = self.read_pc_byte(interconnect), // LD B,n
+            0x08 => {
+                // LD (nn), SP
+                let addr = self.read_pc_halfword(interconnect);
+
+                interconnect.write_halfword(addr, self.sp);
+            }
             0x0a => {
                 let addr = self.bc();
                 self.a = interconnect.read_byte(addr);
@@ -302,6 +308,14 @@ impl Cpu {
 
                 self.a = val;
             }
+            0xc1 => {
+                // POP BC
+                let c = self.pop_byte(interconnect);
+                let b = self.pop_byte(interconnect);
+
+                self.b = b;
+                self.c = c;
+            }
             0xc3 => {
                 // JP nn - Jump to address nn
                 let lsb = self.read_pc_byte(interconnect);
@@ -309,9 +323,14 @@ impl Cpu {
 
                 self.pc = ((msb as u16) << 8) | lsb as u16;
             }
+            0xc5 => {
+                // PUSH BC
+                let halfword = self.bc();
+                self.push_halfword(interconnect, halfword);
+            }
             0xc9 => {
                 // RET - pop return address and jump there
-                let addr = self.pop(interconnect);
+                let addr = self.pop_halfword(interconnect);
                 self.pc = addr;
             }
             0xcd => {
@@ -320,8 +339,21 @@ impl Cpu {
                 self.pc += 2;
 
                 let pc = self.pc;
-                self.push(interconnect, pc);
+                self.push_halfword(interconnect, pc);
                 self.pc = addr;
+            }
+            0xd1 => {
+                // POP DE
+                let e = self.pop_byte(interconnect);
+                let d = self.pop_byte(interconnect);
+
+                self.d = d;
+                self.e = e;
+            }
+            0xd5 => {
+                // PUSH DE
+                let halfword = self.de();
+                self.push_halfword(interconnect, halfword);
             }
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
@@ -386,6 +418,14 @@ impl Cpu {
                 self.push_byte(interconnect, a);
                 self.push_byte(interconnect, f.into());
             }
+            0xf8 => {
+                // LD HL, SP+n
+                let n = self.read_pc_byte(interconnect) as u16;
+                let addr = self.sp + n;
+                self.h = (addr >> 8) as u8;
+                self.l = (addr & 0xff) as u8;
+            }
+            0xf9 => self.sp = self.hl(), // LD SP, HL
             0xfa => {
                 let addr = self.read_pc_halfword(interconnect);
                 self.a = interconnect.read_byte(addr);
@@ -420,27 +460,28 @@ impl Cpu {
         self.interrupts_enabled = false;
     }
 
-    fn push(&mut self, interconnect: &mut Interconnect, addr: u16) {
-        self.sp -= 1;
+    fn push_halfword(&mut self, interconnect: &mut Interconnect, addr: u16) {
+        println!("PUSH {:04x} {:04x}", addr, self.sp);
+        self.sp -= 2;
         interconnect.write_halfword(self.sp, addr);
-        self.sp -= 1;
     }
 
     fn push_byte(&mut self, interconnect: &mut Interconnect, val: u8) {
+        println!("PUSH {:02x} {:04x}", val, self.sp);
+        self.sp -= 1;
         interconnect.write_byte(self.sp, val);
-        self.sp += 1;
     }
 
-    fn pop(&mut self, interconnect: &mut Interconnect) -> u16 {
-        self.sp += 1;
+    fn pop_halfword(&mut self, interconnect: &mut Interconnect) -> u16 {
         let ret = interconnect.read_halfword(self.sp);
-        self.sp += 1;
+        self.sp += 2;
         ret
     }
 
     fn pop_byte(&mut self, interconnect: &mut Interconnect) -> u8 {
+        let val = interconnect.read_byte(self.sp);
         self.sp += 1;
-        interconnect.read_byte(self.sp)
+        val
     }
 
     pub fn bc(&self) -> u16 {
