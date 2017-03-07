@@ -222,6 +222,12 @@ impl Cpu {
 
                 interconnect.write_byte(self.hl(), val);
             }
+            0x37 => {
+                // SCF
+                self.f.n = false;
+                self.f.h = false;
+                self.f.c = true;
+            }
             0x3a => {
                 self.a = interconnect.read_byte(self.hl());
                 let val = self.hl().wrapping_sub(1);
@@ -240,6 +246,12 @@ impl Cpu {
                 let val = self.read_pc_byte(interconnect);
 
                 self.a = val;
+            }
+            0x3f => {
+                // CCF - complement carry flag
+                self.f.n = false;
+                self.f.h = false;
+                self.f.c = !self.f.c;
             }
             0x40 => {} // LD B, B
             0x41 => self.b = self.c, // LD B, C
@@ -348,6 +360,54 @@ impl Cpu {
                 let val = self.a;
                 self.a = self.add_a(val);
             }
+            0x88 => {
+                // ADDC A, B
+                let val = self.b;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x89 => {
+                // ADDC A, C
+                let val = self.c;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8a => {
+                // ADDC A, D
+                let val = self.d;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8b => {
+                // ADDC A, E
+                let val = self.e;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8c => {
+                // ADDC A, H
+                let val = self.h;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8d => {
+                // ADDC A, L
+                let val = self.l;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8e => {
+                // ADDC A, (HL)
+                let val = interconnect.read_byte(self.hl());
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
+            0x8f => {
+                // ADDC A, A
+                let val = self.a;
+                let carry = self.f.c;
+                self.a = self.addc_a(val, carry);
+            }
             0xc1 => {
                 // POP BC
                 let c = self.pop_byte(interconnect);
@@ -385,6 +445,13 @@ impl Cpu {
                 let pc = self.pc;
                 self.push_halfword(interconnect, pc);
                 self.pc = addr;
+            }
+            0xce => {
+                // ADDC A, n
+                let val = self.read_pc_byte(interconnect);
+                let carry = self.f.c;
+
+                self.a = self.addc_a(val, carry);
             }
             0xd1 => {
                 // POP DE
@@ -533,6 +600,19 @@ impl Cpu {
         self.f.n = false;
         self.f.h = ((self.a & 0xf) + (val & 0xf)) > 0xf;
         self.f.c = overflow;
+        r
+    }
+
+    fn addc_a(&mut self, val: u8, carry: bool) -> u8 {
+        let carry = if carry { 1 } else { 0 };
+        let (tmp, overflow) = self.a.overflowing_add(val);
+        let (r, overflow_c) = tmp.overflowing_add(carry);
+
+        self.f.z = r == 0;
+        self.f.n = false;
+        self.f.h = ((self.a & 0xf) + (val & 0xf) + 1) > 0xf;
+        self.f.c = overflow || overflow_c;
+
         r
     }
 
