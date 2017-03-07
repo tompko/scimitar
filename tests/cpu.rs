@@ -751,3 +751,149 @@ fn cpu_push_pop() {
     assert_eq!(cpu.hl(), 0x1234);
     assert_eq!(cpu.pc, 0x100 + 5);
 }
+
+#[test]
+fn cpu_add() {
+    // ADD A, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x02, 0x87], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x04);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, B
+    let (cpu, _, cycles) = run_cpu_test(&[0x06, 0x02, 0x80], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, B - Overflows and Zero
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0xff, 0x06, 0x01, 0x80], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x00);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, true);
+    assert_eq!(cpu.f.c, true);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // ADD A, B - C Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0xf0, 0x06, 0xf0, 0x80], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0xe0);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, true);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // ADD A, B - H Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x0f, 0x06, 0x0f, 0x80], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x1e);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, true);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // ADD A, B - Zero
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x00, 0x06, 0x00, 0x80], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x0);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // ADD A, C
+    let (cpu, _, cycles) = run_cpu_test(&[0x0e, 0x02, 0x81], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, D
+    let (cpu, _, cycles) = run_cpu_test(&[0x16, 0x02, 0x82], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, E
+    let (cpu, _, cycles) = run_cpu_test(&[0x1e, 0x02, 0x83], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, H
+    let (cpu, _, cycles) = run_cpu_test(&[0x26, 0x02, 0x84], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, L
+    let (cpu, _, cycles) = run_cpu_test(&[0x2e, 0x02, 0x85], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // ADD A, (HL)
+    let (cpu, _, cycles) = run_cpu_test(&[0x26, 0xc0, 0x2e, 0x05, 0x86], 3);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x55);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // ADD A, C
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x02], 1);
+
+    assert_eq!(cycles, 8);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 2);
+}
