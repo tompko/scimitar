@@ -325,42 +325,42 @@ impl Cpu {
             0x80 => {
                 // ADD A, B
                 let val = self.b;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x81 => {
                 // ADD A, C
                 let val = self.c;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x82 => {
                 // ADD A, D
                 let val = self.d;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x83 => {
                 // ADD A, E
                 let val = self.e;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x84 => {
                 // ADD A, H
                 let val = self.h;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x85 => {
                 // ADD A, L
                 let val = self.l;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x86 => {
                 // ADD A, (HL)
                 let val = interconnect.read_byte(self.hl());
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x87 => {
                 // ADD A, A
                 let val = self.a;
-                self.a = self.add_a(val);
+                self.a = self.addc_a(val, false);
             }
             0x88 => {
                 // ADDC A, B
@@ -432,7 +432,7 @@ impl Cpu {
             }
             0xc6 => {
                 let n = self.read_pc_byte(interconnect);
-                self.a = self.add_a(n);
+                self.a = self.addc_a(n, false);
             }
             0xc9 => {
                 // RET - pop return address and jump there
@@ -594,15 +594,6 @@ impl Cpu {
         let val = interconnect.read_byte(self.sp);
         self.sp += 1;
         val
-    }
-
-    fn add_a(&mut self, val: u8) -> u8 {
-        let (r, overflow) = self.a.overflowing_add(val);
-        self.f.z = r == 0;
-        self.f.n = false;
-        self.f.h = ((self.a & 0xf) + (val & 0xf)) > 0xf;
-        self.f.c = overflow;
-        r
     }
 
     fn addc_a(&mut self, val: u8, carry: bool) -> u8 {
