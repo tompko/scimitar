@@ -10,14 +10,14 @@ use gameboy::interconnect::GBInterconnect;
 
 fn main() {
     let matches = App::new("Gameboy Emulator")
-                        .version(crate_version!())
-                        .author("tompko  <tompko@gmail.com>")
-                        .about("Emulates the Game Boy language")
-                        .arg(Arg::with_name("INPUT")
-                            .help("Sets the cartridge file to use")
-                            .required(true)
-                            .index(1))
-                        .get_matches();
+        .version(crate_version!())
+        .author("tompko  <tompko@gmail.com>")
+        .about("Emulates the Game Boy language")
+        .arg(Arg::with_name("INPUT")
+                 .help("Sets the cartridge file to use")
+                 .required(true)
+                 .index(1))
+        .get_matches();
 
     let input_file = matches.value_of("INPUT").unwrap();
     let cartridge = Cartridge::load(input_file).unwrap();

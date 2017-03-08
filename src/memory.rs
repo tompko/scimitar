@@ -4,9 +4,7 @@ pub struct Memory {
 
 impl Memory {
     pub fn new(size: u16) -> Memory {
-        Memory{
-            mem: vec![0; size as usize].into_boxed_slice(),
-        }
+        Memory { mem: vec![0; size as usize].into_boxed_slice() }
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {

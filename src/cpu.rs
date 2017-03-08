@@ -29,7 +29,7 @@ impl Into<u8> for Flags {
 
 impl From<u8> for Flags {
     fn from(value: u8) -> Self {
-        Flags{
+        Flags {
             z: (value & (1 << 7)) != 0,
             n: (value & (1 << 6)) != 0,
             h: (value & (1 << 5)) != 0,
@@ -55,6 +55,7 @@ pub struct Cpu {
     pub interrupts_enabled: bool,
 }
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 static CYCLE_COUNTS: [u16; 256] = [
      4, 12,  8,  8,  4,  4,  8,  4, 20,  8,  8,  8,  4,  4,  8,  4,
      0, 12,  8,  8,  4,  4,  8,  4, 12,  8,  8,  8,  4,  4,  8,  4,
@@ -74,6 +75,7 @@ static CYCLE_COUNTS: [u16; 256] = [
     12, 12,  8,  4,  0, 16,  8, 16, 12,  8, 16,  4,  0,  0,  8, 16
 ];
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 #[allow(dead_code)] // TODO - remove once CB instructions are implemented
 static CB_CYCLE_COUNTS: [u16; 256] = [
      8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
@@ -96,14 +98,14 @@ static CB_CYCLE_COUNTS: [u16; 256] = [
 
 impl Cpu {
     pub fn new() -> Cpu {
-        let f = Flags{
+        let f = Flags {
             z: false,
             n: false,
             h: false,
             c: false,
         };
 
-        Cpu{
+        Cpu {
             a: 0,
             f: f,
             b: 0,
@@ -268,7 +270,7 @@ impl Cpu {
             0x58 => self.e = self.b, // LD E, B
             0x59 => self.e = self.c, // LD E, C
             0x5a => self.e = self.d, // LD E, D
-            0x5b => {}, // LD E, E
+            0x5b => {} // LD E, E
             0x5c => self.e = self.h, // LD E, H
             0x5d => self.e = self.l, // LD E, L
             0x5e => self.e = interconnect.read_byte(self.hl()), // LD E, (HL)
@@ -277,7 +279,7 @@ impl Cpu {
             0x61 => self.h = self.c, // LD H, C
             0x62 => self.h = self.d, // LD H, D
             0x63 => self.h = self.e, // LD H, E
-            0x64 => {}, // LD H, H
+            0x64 => {} // LD H, H
             0x65 => self.h = self.l, // LD H, L
             0x66 => self.h = interconnect.read_byte(self.hl()), // LD H, (HL)
             0x67 => self.h = self.a, // LD H, A
@@ -287,7 +289,7 @@ impl Cpu {
             0x6b => self.l = self.e, // LD L, E
             0x6c => self.l = self.h, // LD L, H
             0x6f => self.l = self.a, // LD L, A
-            0x6d => {}, // LD L, L
+            0x6d => {} // LD L, L
             0x6e => self.l = interconnect.read_byte(self.hl()), // LD L, (HL)
             0x70 => interconnect.write_byte(self.hl(), self.b), // LD (HL), B
             0x71 => interconnect.write_byte(self.hl(), self.c), // LD (HL), C

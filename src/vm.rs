@@ -9,7 +9,7 @@ pub struct VM<T: Interconnect> {
 impl<T: Interconnect> VM<T> {
     pub fn new(interconnect: T) -> VM<T> {
         let cpu = Cpu::new();
-        VM{
+        VM {
             inter: interconnect,
             cpu: cpu,
         }

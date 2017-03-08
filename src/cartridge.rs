@@ -18,9 +18,7 @@ impl Cartridge {
     pub fn from_bytes(bytes: &[u8]) -> Cartridge {
         let bytes_copy = bytes.to_vec();
 
-        Cartridge{
-            bytes: bytes_copy.into_boxed_slice(),
-        }
+        Cartridge { bytes: bytes_copy.into_boxed_slice() }
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
