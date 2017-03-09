@@ -1045,6 +1045,276 @@ fn cpu_addc_a() {
 }
 
 #[test]
+fn cpu_sub() {
+    // SUB A, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x02, 0x97], 2);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.a, 0x00);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 3);
+
+    // SUB A, B
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x06, 0x02, 0x90], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, B - C Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x60, 0x06, 0x70, 0x90], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0xf0);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, true);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, B - H Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0xf6, 0x06, 0xe7, 0x90], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x0f);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, true);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, B - Zero
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x00, 0x06, 0x00, 0x90], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x0);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, C
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x0e, 0x02, 0x91], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, D
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x16, 0x02, 0x92], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, E
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x1e, 0x02, 0x93], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, H
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x26, 0x02, 0x94], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, L
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x2e, 0x02, 0x95], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+
+    // SUB A, (HL)
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x57, 0x26, 0xc0, 0x2e, 0x05, 0x96], 4);
+
+    assert_eq!(cycles, 32);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 7);
+
+    // SUB A, n
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0xd6, 0x02], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 4);
+}
+
+#[test]
+fn cpu_subc_a() {
+    // SUBC A, A
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x02, 0x37, 0x9f], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.a, 0xff);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, true);
+    assert_eq!(cpu.f.c, true);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // SUBC A, B
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x06, 0x02, 0x37, 0x98], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, B - C Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0xe1, 0x06, 0xf0, 0x37, 0x98], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0xf0);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, true);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, B - H Overflow
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x7e, 0x06, 0x0e, 0x37, 0x98], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x6f);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, true);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, B - Zero
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x02, 0x06, 0x01, 0x37, 0x98], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x0);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, C
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x0e, 0x02, 0x37, 0x99], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, D
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x16, 0x02, 0x37, 0x9a], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, E
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x1e, 0x02, 0x37, 0x9b], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, H
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x26, 0x02, 0x37, 0x9c], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, L
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x2e, 0x02, 0x37, 0x9d], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // SUBC A, (HL)
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x57, 0x26, 0xc0, 0x2e, 0x05, 0x37, 0x9e], 5);
+
+    assert_eq!(cycles, 36);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 8);
+
+    // SUBC A, n
+    let (cpu, _, cycles) = run_cpu_test(&[0x3e, 0x04, 0x37, 0xde, 0x02], 3);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x01);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, true);
+    assert_eq!(cpu.f.h, false);
+    assert_eq!(cpu.f.c, false);
+    assert_eq!(cpu.pc, 0x100 + 5);
+}
+
+#[test]
 fn cpu_cf() {
     // SCF
     let (cpu, _, cycles) = run_cpu_test(&[0x37], 1);

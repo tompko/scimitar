@@ -410,6 +410,94 @@ impl Cpu {
                 let carry = self.f.c;
                 self.a = self.addc_a(val, carry);
             }
+            0x90 => {
+                // SUB A, B
+                let val = self.b;
+                self.a = self.subc_a(val, false);
+            }
+            0x91 => {
+                // SUB A, C
+                let val = self.c;
+                self.a = self.subc_a(val, false);
+            }
+            0x92 => {
+                // SUB A, D
+                let val = self.d;
+                self.a = self.subc_a(val, false);
+            }
+            0x93 => {
+                // SUB A, E
+                let val = self.e;
+                self.a = self.subc_a(val, false);
+            }
+            0x94 => {
+                // SUB A, H
+                let val = self.h;
+                self.a = self.subc_a(val, false);
+            }
+            0x95 => {
+                // SUB A, L
+                let val = self.l;
+                self.a = self.subc_a(val, false);
+            }
+            0x96 => {
+                // SUB A, (HL)
+                let val = interconnect.read_byte(self.hl());
+                self.a = self.subc_a(val, false);
+            }
+            0x97 => {
+                // SUB A, A
+                let val = self.a;
+                self.a = self.subc_a(val, false);
+            }
+            0x98 => {
+                // SUBC A, B
+                let val = self.b;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x99 => {
+                // SUBC A, C
+                let val = self.c;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9a => {
+                // SUBC A, D
+                let val = self.d;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9b => {
+                // SUBC A, E
+                let val = self.e;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9c => {
+                // SUBC A, H
+                let val = self.h;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9d => {
+                // SUBC A, L
+                let val = self.l;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9e => {
+                // SUBC A, (HL)
+                let val = interconnect.read_byte(self.hl());
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
+            0x9f => {
+                // SUBC A, A
+                let val = self.a;
+                let carry = self.f.c;
+                self.a = self.subc_a(val, carry);
+            }
             0xc1 => {
                 // POP BC
                 let c = self.pop_byte(interconnect);
@@ -467,6 +555,17 @@ impl Cpu {
                 // PUSH DE
                 let halfword = self.de();
                 self.push_halfword(interconnect, halfword);
+            }
+            0xd6 => {
+                // SUB A, n
+                let n = self.read_pc_byte(interconnect);
+                self.a = self.subc_a(n, false);
+            }
+            0xde => {
+                // SUBC A, n
+                let n = self.read_pc_byte(interconnect);
+                let carry = self.f.c;
+                self.a = self.subc_a(n, carry);
             }
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
@@ -603,8 +702,21 @@ impl Cpu {
 
         self.f.z = r == 0;
         self.f.n = false;
-        self.f.h = ((self.a & 0xf) + (val & 0xf) + 1) > 0xf;
+        self.f.h = ((self.a & 0xf) + (val & 0xf) + carry) > 0xf;
         self.f.c = overflow || overflow_c;
+
+        r
+    }
+
+    fn subc_a(&mut self, val: u8, carry: bool) -> u8 {
+        let carry = if carry { 1 } else { 0 };
+        let (tmp, underflow) = self.a.overflowing_sub(val);
+        let (r, underflow_c) = tmp.overflowing_sub(carry);
+
+        self.f.z = r == 0;
+        self.f.n = true;
+        self.f.h = ((val & 0xf) + carry) > (self.a & 0xf);
+        self.f.c = underflow || underflow_c;
 
         r
     }
