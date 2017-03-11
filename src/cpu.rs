@@ -76,7 +76,6 @@ static CYCLE_COUNTS: [u16; 256] = [
 ];
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
-#[allow(dead_code)] // TODO - remove once CB instructions are implemented
 static CB_CYCLE_COUNTS: [u16; 256] = [
      8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
      8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
@@ -126,7 +125,7 @@ impl Cpu {
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
         let instr = self.read_pc_byte(interconnect);
-        let cycle_count = CYCLE_COUNTS[instr as usize];
+        let mut cycle_count = CYCLE_COUNTS[instr as usize];
 
         match instr {
             0x00 => {} // NOP - No Operation
@@ -139,6 +138,19 @@ impl Cpu {
                 self.c = lsb;
             }
             0x02 => interconnect.write_byte(self.bc(), self.a), // LD (BC), A
+            0x03 => {
+                // INC BC
+                let bc = self.bc().wrapping_add(1);
+                self.set_bc(bc);
+            }
+            0x04 => {
+                let val = self.b;
+                self.b = self.inc(val);
+            }
+            0x05 => {
+                let val = self.b;
+                self.b = self.dec(val);
+            }
             0x06 => self.b = self.read_pc_byte(interconnect), // LD B,n
             0x08 => {
                 // LD (nn), SP
@@ -146,9 +158,29 @@ impl Cpu {
 
                 interconnect.write_halfword(addr, self.sp);
             }
+            0x09 => {
+                // ADD HL, BC
+                let (hl, bc) = (self.hl(), self.bc());
+                let val = self.add16(hl, bc);
+
+                self.set_hl(val);
+            }
             0x0a => {
                 let addr = self.bc();
                 self.a = interconnect.read_byte(addr);
+            }
+            0x0b => {
+                // DEC BC
+                let bc = self.bc().wrapping_sub(1);
+                self.set_bc(bc);
+            }
+            0x0c => {
+                let val = self.c;
+                self.c = self.inc(val);
+            }
+            0x0d => {
+                let val = self.c;
+                self.c = self.dec(val);
             }
             0x0e => self.c = self.read_pc_byte(interconnect), // LD C,n
             0x11 => {
@@ -160,13 +192,46 @@ impl Cpu {
                 self.e = lsb;
             }
             0x12 => interconnect.write_byte(self.de(), self.a), // LD (DE), A
+            0x13 => {
+                // INC DE
+                let de = self.de().wrapping_add(1);
+                self.set_de(de);
+            }
+            0x14 => {
+                let val = self.d;
+                self.d = self.inc(val);
+            }
+            0x15 => {
+                let val = self.d;
+                self.d = self.dec(val);
+            }
             0x16 => self.d = self.read_pc_byte(interconnect), // LD D,n
             0x18 => {
                 // JR n - realtive jump by n
                 let n = self.read_pc_byte(interconnect);
                 self.pc = self.pc.wrapping_add(n as i8 as u16);
             }
+            0x19 => {
+                // ADD HL, DE
+                let (hl, de) = (self.hl(), self.de());
+                let val = self.add16(hl, de);
+
+                self.set_hl(val);
+            }
             0x1a => self.a = interconnect.read_byte(self.de()),
+            0x1b => {
+                // DEC DE
+                let de = self.de().wrapping_sub(1);
+                self.set_de(de);
+            }
+            0x1c => {
+                let val = self.e;
+                self.e = self.inc(val);
+            }
+            0x1d => {
+                let val = self.e;
+                self.e = self.dec(val);
+            }
             0x1e => self.e = self.read_pc_byte(interconnect), // LD E,n
             0x21 => {
                 // LD HL, nn
@@ -185,14 +250,26 @@ impl Cpu {
                 self.l = (val & 0xff) as u8;
             }
             0x23 => {
-                // INC HL
-                let mut val = ((self.h as u16) << 8) | (self.l as u16);
-                val = val.wrapping_add(1);
-
-                self.h = (val >> 8) as u8;
-                self.l = (val & 0xff) as u8;
+                // INC DE
+                let hl = self.hl().wrapping_add(1);
+                self.set_hl(hl);
+            }
+            0x24 => {
+                let val = self.h;
+                self.h = self.inc(val);
+            }
+            0x25 => {
+                let val = self.h;
+                self.h = self.dec(val);
             }
             0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
+            0x29 => {
+                // ADD HL, HL
+                let hl = self.hl();
+                let val = self.add16(hl, hl);
+
+                self.set_hl(val);
+            }
             0x2a => {
                 // LDI A, (HL) - Load the value at address HL into A, increment HL
                 self.a = interconnect.read_byte(self.hl());
@@ -201,7 +278,26 @@ impl Cpu {
                 self.h = (val >> 8) as u8;
                 self.l = (val & 0xff) as u8;
             }
+            0x2b => {
+                // DEC HL
+                let hl = self.hl().wrapping_sub(1);
+                self.set_hl(hl);
+            }
+            0x2c => {
+                let val = self.l;
+                self.l = self.inc(val);
+            }
+            0x2d => {
+                let val = self.l;
+                self.l = self.dec(val);
+            }
             0x2e => self.l = self.read_pc_byte(interconnect), // LD L,n
+            0x2f => {
+                self.a = !self.a;
+
+                self.f.n = true;
+                self.f.h = true;
+            }
             0x31 => {
                 // LD SP, nn
                 let lsb = self.read_pc_byte(interconnect);
@@ -219,6 +315,19 @@ impl Cpu {
                 self.h = (val >> 8) as u8;
                 self.l = (val & 0xff) as u8;
             }
+            0x33 => {
+                // INC SP
+                let sp = self.sp.wrapping_add(1);
+                self.sp = sp;
+            }
+            0x34 => {
+                let val = interconnect.read_byte(self.hl());
+                interconnect.write_byte(self.hl(), self.inc(val));
+            }
+            0x35 => {
+                let val = interconnect.read_byte(self.hl());
+                interconnect.write_byte(self.hl(), self.dec(val));
+            }
             0x36 => {
                 let val = self.read_pc_byte(interconnect);
 
@@ -230,6 +339,13 @@ impl Cpu {
                 self.f.h = false;
                 self.f.c = true;
             }
+            0x39 => {
+                // ADD HL, SP
+                let (hl, sp) = (self.hl(), self.sp);
+                let val = self.add16(hl, sp);
+
+                self.set_hl(val);
+            }
             0x3a => {
                 self.a = interconnect.read_byte(self.hl());
                 let val = self.hl().wrapping_sub(1);
@@ -237,11 +353,18 @@ impl Cpu {
                 self.h = (val >> 8) as u8;
                 self.l = (val & 0xff) as u8;
             }
+            0x3b => {
+                // DEC SP
+                let sp = self.sp.wrapping_sub(1);
+                self.sp = sp;
+            }
             0x3c => {
-                self.f.h = (self.a & 0xf).wrapping_add(1) > 0xf;
-                self.a = self.a.wrapping_add(1);
-                self.f.z = self.a == 0;
-                self.f.n = false;
+                let val = self.a;
+                self.a = self.inc(val);
+            }
+            0x3d => {
+                let val = self.a;
+                self.a = self.dec(val);
             }
             0x3e => {
                 // LD A, # - Load immediate 8-bit into A
@@ -325,178 +448,306 @@ impl Cpu {
             0x80 => {
                 // ADD A, B
                 let val = self.b;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x81 => {
                 // ADD A, C
                 let val = self.c;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x82 => {
                 // ADD A, D
                 let val = self.d;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x83 => {
                 // ADD A, E
                 let val = self.e;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x84 => {
                 // ADD A, H
                 let val = self.h;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x85 => {
                 // ADD A, L
                 let val = self.l;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x86 => {
                 // ADD A, (HL)
                 let val = interconnect.read_byte(self.hl());
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x87 => {
                 // ADD A, A
                 let val = self.a;
-                self.a = self.addc_a(val, false);
+                self.a = self.addc(val, false);
             }
             0x88 => {
                 // ADDC A, B
                 let val = self.b;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x89 => {
                 // ADDC A, C
                 let val = self.c;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8a => {
                 // ADDC A, D
                 let val = self.d;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8b => {
                 // ADDC A, E
                 let val = self.e;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8c => {
                 // ADDC A, H
                 let val = self.h;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8d => {
                 // ADDC A, L
                 let val = self.l;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8e => {
                 // ADDC A, (HL)
                 let val = interconnect.read_byte(self.hl());
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x8f => {
                 // ADDC A, A
                 let val = self.a;
                 let carry = self.f.c;
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0x90 => {
                 // SUB A, B
                 let val = self.b;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x91 => {
                 // SUB A, C
                 let val = self.c;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x92 => {
                 // SUB A, D
                 let val = self.d;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x93 => {
                 // SUB A, E
                 let val = self.e;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x94 => {
                 // SUB A, H
                 let val = self.h;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x95 => {
                 // SUB A, L
                 let val = self.l;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x96 => {
                 // SUB A, (HL)
                 let val = interconnect.read_byte(self.hl());
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x97 => {
                 // SUB A, A
                 let val = self.a;
-                self.a = self.subc_a(val, false);
+                self.a = self.subc(val, false);
             }
             0x98 => {
                 // SUBC A, B
                 let val = self.b;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x99 => {
                 // SUBC A, C
                 let val = self.c;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9a => {
                 // SUBC A, D
                 let val = self.d;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9b => {
                 // SUBC A, E
                 let val = self.e;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9c => {
                 // SUBC A, H
                 let val = self.h;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9d => {
                 // SUBC A, L
                 let val = self.l;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9e => {
                 // SUBC A, (HL)
                 let val = interconnect.read_byte(self.hl());
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
             }
             0x9f => {
                 // SUBC A, A
                 let val = self.a;
                 let carry = self.f.c;
-                self.a = self.subc_a(val, carry);
+                self.a = self.subc(val, carry);
+            }
+            0xa0 => {
+                let val = self.b;
+                self.a = self.and(val);
+            }
+            0xa1 => {
+                let val = self.c;
+                self.a = self.and(val);
+            }
+            0xa2 => {
+                let val = self.d;
+                self.a = self.and(val);
+            }
+            0xa3 => {
+                let val = self.e;
+                self.a = self.and(val);
+            }
+            0xa4 => {
+                let val = self.h;
+                self.a = self.and(val);
+            }
+            0xa5 => {
+                let val = self.l;
+                self.a = self.and(val);
+            }
+            0xa6 => {
+                let val = interconnect.read_byte(self.hl());
+                self.a = self.and(val);
+            }
+            0xa7 => {
+                let val = self.a;
+                self.a = self.and(val);
+            }
+            0xa8 => {
+                let val = self.b;
+                self.a = self.xor(val);
+            }
+            0xa9 => {
+                let val = self.c;
+                self.a = self.xor(val);
+            }
+            0xaa => {
+                let val = self.d;
+                self.a = self.xor(val);
+            }
+            0xab => {
+                let val = self.e;
+                self.a = self.xor(val);
+            }
+            0xac => {
+                let val = self.h;
+                self.a = self.xor(val);
+            }
+            0xad => {
+                let val = self.l;
+                self.a = self.xor(val);
+            }
+            0xae => {
+                let val = interconnect.read_byte(self.hl());
+                self.a = self.xor(val);
+            }
+            0xaf => {
+                let val = self.a;
+                self.a = self.xor(val);
+            }
+            0xb0 => {
+                let val = self.b;
+                self.a = self.or(val);
+            }
+            0xb1 => {
+                let val = self.c;
+                self.a = self.or(val);
+            }
+            0xb2 => {
+                let val = self.d;
+                self.a = self.or(val);
+            }
+            0xb3 => {
+                let val = self.e;
+                self.a = self.or(val);
+            }
+            0xb4 => {
+                let val = self.h;
+                self.a = self.or(val);
+            }
+            0xb5 => {
+                let val = self.l;
+                self.a = self.or(val);
+            }
+            0xb6 => {
+                let val = interconnect.read_byte(self.hl());
+                self.a = self.or(val);
+            }
+            0xb7 => {
+                let val = self.a;
+                self.a = self.or(val);
+            }
+            0xb8 => {
+                let val = self.b;
+                self.subc(val, false);
+            }
+            0xb9 => {
+                let val = self.c;
+                self.subc(val, false);
+            }
+            0xba => {
+                let val = self.d;
+                self.subc(val, false);
+            }
+            0xbb => {
+                let val = self.e;
+                self.subc(val, false);
+            }
+            0xbc => {
+                let val = self.h;
+                self.subc(val, false);
+            }
+            0xbd => {
+                let val = self.l;
+                self.subc(val, false);
+            }
+            0xbe => {
+                let val = interconnect.read_byte(self.hl());
+                self.subc(val, false);
+            }
+            0xbf => {
+                let val = self.a;
+                self.subc(val, false);
             }
             0xc1 => {
                 // POP BC
@@ -520,12 +771,53 @@ impl Cpu {
             }
             0xc6 => {
                 let n = self.read_pc_byte(interconnect);
-                self.a = self.addc_a(n, false);
+                self.a = self.addc(n, false);
             }
             0xc9 => {
                 // RET - pop return address and jump there
                 let addr = self.pop_halfword(interconnect);
                 self.pc = addr;
+            }
+            0xcb => {
+                // Extended instructions
+                let sub_instr = self.read_pc_byte(interconnect);
+                match sub_instr {
+                    0x30 => { // SWAP B
+                        let val = self.b;
+                        self.b = self.swap(val);
+                    }
+                    0x31 => { // SWAP C
+                        let val = self.c;
+                        self.c = self.swap(val);
+                    }
+                    0x32 => { // SWAP D
+                        let val = self.d;
+                        self.d = self.swap(val);
+                    }
+                    0x33 => { // SWAP E
+                        let val = self.e;
+                        self.e = self.swap(val);
+                    }
+                    0x34 => { // SWAP H
+                        let val = self.h;
+                        self.h = self.swap(val);
+                    }
+                    0x35 => { // SWAP L
+                        let val = self.l;
+                        self.l = self.swap(val);
+                    }
+                    0x36 => { // SWAP (HL)
+                        let val = interconnect.read_byte(self.hl());
+                        let res = self.swap(val);
+                        interconnect.write_byte(self.hl(), res);
+                    }
+                    0x37 => { // SWAP A
+                        let val = self.a;
+                        self.a = self.swap(val);
+                    }
+                    _ => panic!("Unrecognized extended instruction {:02x}", sub_instr),
+                }
+                cycle_count += CB_CYCLE_COUNTS[sub_instr as usize];
             }
             0xcd => {
                 // CALL nn - Call function at nn
@@ -541,7 +833,7 @@ impl Cpu {
                 let val = self.read_pc_byte(interconnect);
                 let carry = self.f.c;
 
-                self.a = self.addc_a(val, carry);
+                self.a = self.addc(val, carry);
             }
             0xd1 => {
                 // POP DE
@@ -559,13 +851,13 @@ impl Cpu {
             0xd6 => {
                 // SUB A, n
                 let n = self.read_pc_byte(interconnect);
-                self.a = self.subc_a(n, false);
+                self.a = self.subc(n, false);
             }
             0xde => {
                 // SUBC A, n
                 let n = self.read_pc_byte(interconnect);
                 let carry = self.f.c;
-                self.a = self.subc_a(n, carry);
+                self.a = self.subc(n, carry);
             }
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
@@ -595,10 +887,33 @@ impl Cpu {
                 self.push_byte(interconnect, h);
                 self.push_byte(interconnect, l);
             }
+            0xe6 => {
+                let val = self.read_pc_byte(interconnect);
+                self.a = self.and(val);
+            }
+            0xe8 => {
+                // ADD SP, n - Add 8 bit immediate to SP
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let sp = self.sp;
+
+                let (res, overflow) = sp.overflowing_add(n);
+
+                println!("{:02} {:04x} {:04x}", n, sp, res);
+
+                self.sp = res;
+                self.f.z = false;
+                self.f.n = false;
+                self.f.h = ((sp & 0x0f) + (n & 0xf)) > 0xf;
+                self.f.c = overflow;
+            }
             0xea => {
                 // LD nn, A - Store A to immediate address
                 let addr = self.read_pc_halfword(interconnect);
                 interconnect.write_byte(addr, self.a);
+            }
+            0xee => {
+                let val = self.read_pc_byte(interconnect);
+                self.a = self.xor(val);
             }
             0xf0 => {
                 let n = self.read_pc_byte(interconnect);
@@ -630,6 +945,10 @@ impl Cpu {
                 self.push_byte(interconnect, a);
                 self.push_byte(interconnect, f.into());
             }
+            0xf6 => {
+                let val = self.read_pc_byte(interconnect);
+                self.a = self.or(val);
+            }
             0xf8 => {
                 // LD HL, SP+n
                 let n = self.read_pc_byte(interconnect) as u16;
@@ -641,6 +960,10 @@ impl Cpu {
             0xfa => {
                 let addr = self.read_pc_halfword(interconnect);
                 self.a = interconnect.read_byte(addr);
+            }
+            0xfe => {
+                let val = self.read_pc_byte(interconnect);
+                self.subc(val, false);
             }
             _ => panic!("Unrecognized instruction {:02x}", instr),
         }
@@ -695,7 +1018,7 @@ impl Cpu {
         val
     }
 
-    fn addc_a(&mut self, val: u8, carry: bool) -> u8 {
+    fn addc(&mut self, val: u8, carry: bool) -> u8 {
         let carry = if carry { 1 } else { 0 };
         let (tmp, overflow) = self.a.overflowing_add(val);
         let (r, overflow_c) = tmp.overflowing_add(carry);
@@ -708,7 +1031,17 @@ impl Cpu {
         r
     }
 
-    fn subc_a(&mut self, val: u8, carry: bool) -> u8 {
+    fn add16(&mut self, lhs: u16, rhs: u16) -> u16 {
+        let (ret, overflow) = lhs.overflowing_add(rhs);
+
+        self.f.n = false;
+        self.f.h = ((lhs &0x0fff) + (rhs & 0x0fff)) > 0x0fff;
+        self.f.c = overflow;
+
+        ret
+    }
+
+    fn subc(&mut self, val: u8, carry: bool) -> u8 {
         let carry = if carry { 1 } else { 0 };
         let (tmp, underflow) = self.a.overflowing_sub(val);
         let (r, underflow_c) = tmp.overflowing_sub(carry);
@@ -721,6 +1054,65 @@ impl Cpu {
         r
     }
 
+    fn and(&mut self, val: u8) -> u8 {
+        let r = self.a & val;
+
+        self.f.z = r == 0;
+        self.f.n = false;
+        self.f.h = true;
+        self.f.c = false;
+
+        r
+    }
+
+    fn or(&mut self, val: u8) -> u8 {
+        let r = self.a | val;
+
+        self.f.z = r == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = false;
+
+        r
+    }
+
+    fn xor(&mut self, val: u8) -> u8 {
+        let r = self.a ^ val;
+
+        self.f.z = r == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = false;
+
+        r
+    }
+
+    fn inc(&mut self, val: u8) -> u8 {
+        let r = val.wrapping_add(1);
+
+        self.f.z = r == 0;
+        self.f.n = false;
+        self.f.h = (r & 0x0f) == 0;
+
+        r
+    }
+
+    fn dec(&mut self, val: u8) -> u8 {
+        let r = val.wrapping_sub(1);
+
+        self.f.z = r == 0;
+        self.f.n = true;
+        self.f.h = (r & 0x0f) == 0x0f;
+
+        r
+    }
+
+    fn swap(&mut self, val: u8) -> u8 {
+        self.f.z = val == 0;
+
+        ((val & 0x0f) << 4) | ((val & 0xf0) >> 4)
+    }
+
     pub fn bc(&self) -> u16 {
         ((self.b as u16) << 8) | (self.c as u16)
     }
@@ -731,6 +1123,21 @@ impl Cpu {
 
     pub fn hl(&self) -> u16 {
         ((self.h as u16) << 8) | (self.l as u16)
+    }
+
+    pub fn set_bc(&mut self, val: u16) {
+        self.b = (val >> 8) as u8;
+        self.c = (val & 0xff) as u8;
+    }
+
+    pub fn set_de(&mut self, val: u16) {
+        self.d = (val >> 8) as u8;
+        self.e = (val & 0xff) as u8;
+    }
+
+    pub fn set_hl(&mut self, val: u16) {
+        self.h = (val >> 8) as u8;
+        self.l = (val & 0xff) as u8;
     }
 }
 
