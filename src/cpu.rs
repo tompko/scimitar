@@ -233,6 +233,14 @@ impl Cpu {
                 self.e = self.dec(val);
             }
             0x1e => self.e = self.read_pc_byte(interconnect), // LD E,n
+            0x20 => {
+                // JR NZ, n
+                let n = self.read_pc_byte(interconnect) as u16;
+
+                if !self.f.z {
+                    self.pc = self.pc.wrapping_add(n);
+                }
+            }
             0x21 => {
                 // LD HL, nn
                 let lsb = self.read_pc_byte(interconnect);
@@ -263,6 +271,14 @@ impl Cpu {
                 self.h = self.dec(val);
             }
             0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
+            0x28 => {
+                // JR Z, n
+                let n = self.read_pc_byte(interconnect) as u16;
+
+                if self.f.z {
+                    self.pc = self.pc.wrapping_add(n);
+                }
+            }
             0x29 => {
                 // ADD HL, HL
                 let hl = self.hl();
@@ -297,6 +313,14 @@ impl Cpu {
 
                 self.f.n = true;
                 self.f.h = true;
+            }
+            0x30 => {
+                // JMP NC, n
+                let n = self.read_pc_byte(interconnect) as u16;
+
+                if !self.f.c {
+                    self.pc = self.pc.wrapping_add(n);
+                }
             }
             0x31 => {
                 // LD SP, nn
@@ -338,6 +362,14 @@ impl Cpu {
                 self.f.n = false;
                 self.f.h = false;
                 self.f.c = true;
+            }
+            0x38 => {
+                // JMP C, n
+                let n = self.read_pc_byte(interconnect) as u16;
+
+                if self.f.c {
+                    self.pc = self.pc.wrapping_add(n);
+                }
             }
             0x39 => {
                 // ADD HL, SP
@@ -898,8 +930,6 @@ impl Cpu {
 
                 let (res, overflow) = sp.overflowing_add(n);
 
-                println!("{:02} {:04x} {:04x}", n, sp, res);
-
                 self.sp = res;
                 self.f.z = false;
                 self.f.n = false;
@@ -1001,7 +1031,6 @@ impl Cpu {
     }
 
     fn push_byte(&mut self, interconnect: &mut Interconnect, val: u8) {
-        println!("PUSH {:02x} {:04x}", val, self.sp);
         self.sp -= 1;
         interconnect.write_byte(self.sp, val);
     }

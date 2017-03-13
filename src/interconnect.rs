@@ -15,6 +15,7 @@ pub struct GBInterconnect {
     cartridge: Cartridge,
     internal_ram: Memory,
     io_ports: Memory,
+    high_ram: Memory,
     ie_register: u8,
 }
 
@@ -28,6 +29,7 @@ impl GBInterconnect {
             cartridge: cartridge,
             internal_ram: Memory::new(INTERNAL_RAM_SIZE),
             io_ports: Memory::new(IO_PORTS_SIZE),
+            high_ram: Memory::new(HIGH_RAM_END),
             ie_register: 0,
         }
     }
@@ -42,6 +44,8 @@ impl Interconnect for GBInterconnect {
             }
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
             IO_PORTS_START...IO_PORTS_END => self.io_ports.read_byte(addr - IO_PORTS_START),
+            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
+            0xffff => self.ie_register,
             _ => panic!("Read from unrecognized memory segment {:04x}", addr),
         }
     }
@@ -55,6 +59,7 @@ impl Interconnect for GBInterconnect {
                 self.internal_ram.write_byte(addr - IRAM_ECHO_START, val)
             }
             IO_PORTS_START...IO_PORTS_END => self.io_ports.write_byte(addr - IO_PORTS_START, val),
+            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
             0xffff => self.ie_register = val,
             _ => {
                 panic!("Write to unrecognized memory segment {:04x} = {:02x}",

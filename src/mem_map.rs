@@ -19,5 +19,9 @@ pub const IRAM_ECHO_SIZE: u16 = 0x1e00;
 pub const IRAM_ECHO_END: u16 = IRAM_ECHO_START + IRAM_ECHO_SIZE - 1;
 
 pub const IO_PORTS_START: u16 = 0xff00;
-pub const IO_PORTS_SIZE: u16 = 0x4c;
+pub const IO_PORTS_SIZE: u16 = 0x80;
 pub const IO_PORTS_END: u16 = IO_PORTS_START + IO_PORTS_SIZE - 1;
+
+pub const HIGH_RAM_START: u16 = 0xff80;
+pub const HIGH_RAM_SIZE: u16 = 0x7f;
+pub const HIGH_RAM_END: u16 = HIGH_RAM_START + HIGH_RAM_SIZE - 1;

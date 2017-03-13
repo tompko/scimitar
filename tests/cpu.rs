@@ -2276,3 +2276,70 @@ fn cpu_cf() {
     assert_eq!(cpu.f.c, false);
     assert_eq!(cpu.pc, 0x100 + 2);
 }
+
+#[test]
+fn cpu_jr() {
+    // JR n - positive jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x18, 0x02], 1);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // JR n - negative jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x18, 0xfe], 1);
+
+    assert_eq!(cycles, 12);
+    assert_eq!(cpu.pc, 0x100 + 0);
+}
+
+#[test]
+fn cpu_jr_cc_n() {
+    // JR NZ, n - take jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x02, 0x20, 0x02], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // JR NZ, n - no jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x00, 0x20, 0x02], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // JR Z, n - take jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x00, 0x28, 0x02], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // JR Z, n - no jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x02, 0x28, 0x02], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // JR NC, n - take jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3F, 0x30, 0x02], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // JR NC, n - no jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x00, 0x30, 0x02], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+    // JR C, n - take jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x00, 0x38, 0x02], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 6);
+
+    // JR C, n - no jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x38, 0x02], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 4);
+
+}
