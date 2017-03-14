@@ -5,3 +5,4 @@ pub mod interconnect;
 
 mod mem_map;
 mod memory;
+mod gpu;

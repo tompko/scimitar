@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use mem_map::*;
 use cartridge::Cartridge;
 use memory::Memory;
+use gpu::Gpu;
 
 pub trait Interconnect {
     fn read_byte(&self, addr: u16) -> u8;
@@ -13,6 +14,8 @@ pub trait Interconnect {
 
 pub struct GBInterconnect {
     cartridge: Cartridge,
+    gpu: Gpu,
+
     internal_ram: Memory,
     io_ports: Memory,
     high_ram: Memory,
@@ -27,6 +30,8 @@ impl GBInterconnect {
     pub fn new(cartridge: Cartridge) -> GBInterconnect {
         GBInterconnect {
             cartridge: cartridge,
+            gpu: Gpu::new(),
+
             internal_ram: Memory::new(INTERNAL_RAM_SIZE),
             io_ports: Memory::new(IO_PORTS_SIZE),
             high_ram: Memory::new(HIGH_RAM_END),
@@ -39,6 +44,7 @@ impl Interconnect for GBInterconnect {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
             ROM0_START...ROM0_END => self.cartridge.read_byte(addr - ROM0_START),
+            VRAM_START...VRAM_END => self.gpu.read_byte(addr - VRAM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
@@ -52,6 +58,7 @@ impl Interconnect for GBInterconnect {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
+            VRAM_START...VRAM_END => self.gpu.write_byte(addr - VRAM_START, val),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)
             }
