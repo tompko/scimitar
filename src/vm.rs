@@ -7,8 +7,12 @@ pub struct VM<T: Interconnect> {
 }
 
 impl<T: Interconnect> VM<T> {
-    pub fn new(interconnect: T) -> VM<T> {
-        let cpu = Cpu::new();
+    pub fn new(interconnect: T, with_boot_rom: bool) -> VM<T> {
+        let mut cpu = Cpu::new();
+        if with_boot_rom {
+            cpu.pc = 0x0000;
+        }
+
         VM {
             inter: interconnect,
             cpu: cpu,

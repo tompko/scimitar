@@ -15,7 +15,7 @@ fn run_cpu_test(instrs: &[u8], num_steps: usize) -> (Cpu, MockInterconnect, u16)
         interconnect.set_mem(0xc000 + (i as u16), 0x50 + i as u8);
     }
 
-    let mut vm = VM::new(interconnect);
+    let mut vm = VM::new(interconnect, false);
 
     let mut cycles = 0;
     for _ in 0..num_steps {
