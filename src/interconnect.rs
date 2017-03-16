@@ -17,7 +17,6 @@ pub struct GBInterconnect {
     gpu: Gpu,
 
     internal_ram: Memory,
-    io_ports: Memory,
     high_ram: Memory,
     ie_register: u8,
 }
@@ -33,7 +32,6 @@ impl GBInterconnect {
             gpu: Gpu::new(),
 
             internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
-            io_ports: Memory::new(IO_PORTS_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
             ie_register: 0,
         }
@@ -44,13 +42,14 @@ impl Interconnect for GBInterconnect {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
             ROM0_START...ROM0_END => self.cartridge.read_byte(addr - ROM0_START),
-            VRAM_START...VRAM_END => self.gpu.read_byte(addr - VRAM_START),
+            VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
-            IO_PORTS_START...IO_PORTS_END => self.io_ports.read_byte(addr - IO_PORTS_START),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
+            OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            0xff40...0xff4b => self.gpu.read_reg(addr),
             0xffff => self.ie_register,
             _ => panic!("Read from unrecognized memory segment {:04x}", addr),
         }
@@ -58,15 +57,16 @@ impl Interconnect for GBInterconnect {
 
     fn write_byte(&mut self, addr: u16, val: u8) {
         match addr {
-            VRAM_START...VRAM_END => self.gpu.write_byte(addr - VRAM_START, val),
+            VRAM_START...VRAM_END => self.gpu.write_vram(addr - VRAM_START, val),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)
             }
             IRAM_ECHO_START...IRAM_ECHO_END => {
                 self.internal_ram.write_byte(addr - IRAM_ECHO_START, val)
             }
-            IO_PORTS_START...IO_PORTS_END => self.io_ports.write_byte(addr - IO_PORTS_START, val),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
+            OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
+            0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xffff => self.ie_register = val,
             _ => {
                 panic!("Write to unrecognized memory segment {:04x} = {:02x}",

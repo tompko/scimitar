@@ -22,9 +22,9 @@ pub const OAM_START: u16 = 0xfe00;
 pub const OAM_LENGTH: u16 = 0x00a0;
 pub const OAM_END: u16 = OAM_START + OAM_LENGTH - 1;
 
-pub const IO_PORTS_START: u16 = 0xff00;
-pub const IO_PORTS_LENGTH: u16 = 0x80;
-pub const IO_PORTS_END: u16 = IO_PORTS_START + IO_PORTS_LENGTH - 1;
+// pub const IO_PORTS_START: u16 = 0xff00;
+// pub const IO_PORTS_LENGTH: u16 = 0x80;
+// pub const IO_PORTS_END: u16 = IO_PORTS_START + IO_PORTS_LENGTH - 1;
 
 pub const HIGH_RAM_START: u16 = 0xff80;
 pub const HIGH_RAM_LENGTH: u16 = 0x7f;
