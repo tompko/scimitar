@@ -32,8 +32,8 @@ impl GBInterconnect {
             cartridge: cartridge,
             gpu: Gpu::new(),
 
-            internal_ram: Memory::new(INTERNAL_RAM_SIZE),
-            io_ports: Memory::new(IO_PORTS_SIZE),
+            internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
+            io_ports: Memory::new(IO_PORTS_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
             ie_register: 0,
         }
