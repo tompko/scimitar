@@ -2278,6 +2278,23 @@ fn cpu_cf() {
 }
 
 #[test]
+fn cpu_bit() {
+    let (cpu, _, cycles) = run_cpu_test(&[0xcb, 0x7c], 1);
+
+    assert_eq!(cycles, 8);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, true);
+
+    let (cpu, _, cycles) = run_cpu_test(&[0x26, 0x80, 0xcb, 0x7c], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.n, false);
+    assert_eq!(cpu.f.h, true);
+}
+
+#[test]
 fn cpu_jr() {
     // JR n - positive jump
     let (cpu, _, cycles) = run_cpu_test(&[0x18, 0x02], 1);
@@ -2300,6 +2317,12 @@ fn cpu_jr_cc_n() {
     assert_eq!(cycles, 16);
     assert_eq!(cpu.pc, 0x100 + 6);
 
+    // JR NZ, n - negative jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x02, 0x20, 0xfc], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 0);
+
     // JR NZ, n - no jump
     let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x00, 0x20, 0x02], 2);
 
@@ -2311,6 +2334,12 @@ fn cpu_jr_cc_n() {
 
     assert_eq!(cycles, 16);
     assert_eq!(cpu.pc, 0x100 + 6);
+
+    // JR Z, n - negative jump
+    let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x00, 0x28, 0xfc], 2);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 0);
 
     // JR Z, n - no jump
     let (cpu, _, cycles) = run_cpu_test(&[0xc6, 0x02, 0x28, 0x02], 2);
@@ -2324,6 +2353,12 @@ fn cpu_jr_cc_n() {
     assert_eq!(cycles, 16);
     assert_eq!(cpu.pc, 0x100 + 6);
 
+    // JR NC, n - negative jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3F, 0x30, 0xfc], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 0);
+
     // JR NC, n - no jump
     let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x00, 0x30, 0x02], 3);
 
@@ -2336,10 +2371,15 @@ fn cpu_jr_cc_n() {
     assert_eq!(cycles, 16);
     assert_eq!(cpu.pc, 0x100 + 6);
 
+    // JR C, n - negative jump
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x00, 0x38, 0xfc], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.pc, 0x100 + 0);
+
     // JR C, n - no jump
     let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x38, 0x02], 3);
 
     assert_eq!(cycles, 16);
     assert_eq!(cpu.pc, 0x100 + 4);
-
 }

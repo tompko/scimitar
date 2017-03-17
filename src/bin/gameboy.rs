@@ -18,10 +18,10 @@ fn main() {
                  .required(true)
                  .index(1))
         .arg(Arg::with_name("boot-rom")
-             .help("Sets the boot rom to use")
-             .short("b")
-             .long("boot-rom")
-             .takes_value(true))
+                 .help("Sets the boot rom to use")
+                 .short("b")
+                 .long("boot-rom")
+                 .takes_value(true))
         .get_matches();
 
     let input_file = matches.value_of("INPUT").unwrap();

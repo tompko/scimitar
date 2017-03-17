@@ -8,7 +8,7 @@ pub const ROM0_END: u16 = ROM0_START + ROM0_LENGTH - 1;
 
 pub const VRAM_START: u16 = 0x8000;
 pub const VRAM_LENGTH: u16 = 0x2000;
-pub const VRAM_END: u16 = VRAM_START + VRAM_LENGTH -1;
+pub const VRAM_END: u16 = VRAM_START + VRAM_LENGTH - 1;
 
 pub const INTERNAL_RAM_START: u16 = 0xc000;
 pub const INTERNAL_RAM_LENGTH: u16 = 0x2000;

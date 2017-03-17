@@ -124,6 +124,7 @@ impl Cpu {
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
+        let old_pc = self.pc;
         let instr = self.read_pc_byte(interconnect);
         let mut cycle_count = CYCLE_COUNTS[instr as usize];
 
@@ -235,7 +236,7 @@ impl Cpu {
             0x1e => self.e = self.read_pc_byte(interconnect), // LD E,n
             0x20 => {
                 // JR NZ, n
-                let n = self.read_pc_byte(interconnect) as u16;
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
 
                 if !self.f.z {
                     self.pc = self.pc.wrapping_add(n);
@@ -273,7 +274,7 @@ impl Cpu {
             0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
             0x28 => {
                 // JR Z, n
-                let n = self.read_pc_byte(interconnect) as u16;
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
 
                 if self.f.z {
                     self.pc = self.pc.wrapping_add(n);
@@ -316,7 +317,7 @@ impl Cpu {
             }
             0x30 => {
                 // JMP NC, n
-                let n = self.read_pc_byte(interconnect) as u16;
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
 
                 if !self.f.c {
                     self.pc = self.pc.wrapping_add(n);
@@ -365,7 +366,7 @@ impl Cpu {
             }
             0x38 => {
                 // JMP C, n
-                let n = self.read_pc_byte(interconnect) as u16;
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
 
                 if self.f.c {
                     self.pc = self.pc.wrapping_add(n);
@@ -814,38 +815,50 @@ impl Cpu {
                 // Extended instructions
                 let sub_instr = self.read_pc_byte(interconnect);
                 match sub_instr {
-                    0x30 => { // SWAP B
+                    0x30 => {
+                        // SWAP B
                         let val = self.b;
                         self.b = self.swap(val);
                     }
-                    0x31 => { // SWAP C
+                    0x31 => {
+                        // SWAP C
                         let val = self.c;
                         self.c = self.swap(val);
                     }
-                    0x32 => { // SWAP D
+                    0x32 => {
+                        // SWAP D
                         let val = self.d;
                         self.d = self.swap(val);
                     }
-                    0x33 => { // SWAP E
+                    0x33 => {
+                        // SWAP E
                         let val = self.e;
                         self.e = self.swap(val);
                     }
-                    0x34 => { // SWAP H
+                    0x34 => {
+                        // SWAP H
                         let val = self.h;
                         self.h = self.swap(val);
                     }
-                    0x35 => { // SWAP L
+                    0x35 => {
+                        // SWAP L
                         let val = self.l;
                         self.l = self.swap(val);
                     }
-                    0x36 => { // SWAP (HL)
+                    0x36 => {
+                        // SWAP (HL)
                         let val = interconnect.read_byte(self.hl());
                         let res = self.swap(val);
                         interconnect.write_byte(self.hl(), res);
                     }
-                    0x37 => { // SWAP A
+                    0x37 => {
+                        // SWAP A
                         let val = self.a;
                         self.a = self.swap(val);
+                    }
+                    0x7c => {
+                        let val = self.h;
+                        self.bit(val, 7);
                     }
                     _ => panic!("Unrecognized extended instruction {:02x}", sub_instr),
                 }
@@ -995,7 +1008,7 @@ impl Cpu {
                 let val = self.read_pc_byte(interconnect);
                 self.subc(val, false);
             }
-            _ => panic!("Unrecognized instruction {:02x}", instr),
+            _ => panic!("Unrecognized instruction {:02x} at {:04x}", instr, old_pc),
         }
 
         if self.instructions_to_di > 0 {
@@ -1064,7 +1077,7 @@ impl Cpu {
         let (ret, overflow) = lhs.overflowing_add(rhs);
 
         self.f.n = false;
-        self.f.h = ((lhs &0x0fff) + (rhs & 0x0fff)) > 0x0fff;
+        self.f.h = ((lhs & 0x0fff) + (rhs & 0x0fff)) > 0x0fff;
         self.f.c = overflow;
 
         ret
@@ -1134,6 +1147,12 @@ impl Cpu {
         self.f.h = (r & 0x0f) == 0x0f;
 
         r
+    }
+
+    fn bit(&mut self, val: u8, bit: u8) {
+        self.f.z = (val & (1 << bit)) == 0;
+        self.f.n = false;
+        self.f.h = true;
     }
 
     fn swap(&mut self, val: u8) -> u8 {
