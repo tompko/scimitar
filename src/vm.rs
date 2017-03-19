@@ -1,5 +1,6 @@
 use interconnect::Interconnect;
 use cpu::Cpu;
+use device::Device;
 
 pub struct VM<T: Interconnect> {
     cpu: Cpu,
@@ -19,14 +20,12 @@ impl<T: Interconnect> VM<T> {
         }
     }
 
-    pub fn run(&mut self) {
-        loop {
-            self.step();
-        }
-    }
+    pub fn step(&mut self, device: &mut Device) -> u16 {
+        let cycles = self.cpu.step(&mut self.inter);
 
-    pub fn step(&mut self) -> u16 {
-        self.cpu.step(&mut self.inter)
+        self.inter.step(cycles, device);
+
+        cycles
     }
 
     pub fn get_children(self) -> (Cpu, T) {

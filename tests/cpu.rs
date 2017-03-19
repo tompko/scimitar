@@ -3,6 +3,15 @@ extern crate gameboy;
 use gameboy::cpu::Cpu;
 use gameboy::vm::VM;
 use gameboy::interconnect::{Interconnect, MockInterconnect};
+use gameboy::device::Device;
+
+struct MockDevice {
+}
+
+impl Device for MockDevice {
+    fn update(&mut self) {}
+    fn set_frame_buffer(&mut self, _: &[u32]) {}
+}
 
 fn run_cpu_test(instrs: &[u8], num_steps: usize) -> (Cpu, MockInterconnect, u16) {
     let mut cart_bytes = vec![0; 256 + instrs.len()];
@@ -10,6 +19,7 @@ fn run_cpu_test(instrs: &[u8], num_steps: usize) -> (Cpu, MockInterconnect, u16)
         cart_bytes[i + 256] = *inst;
     }
     let mut interconnect = MockInterconnect::new(&cart_bytes);
+    let mut device = MockDevice{};
 
     for i in 0..10 {
         interconnect.set_mem(0xc000 + (i as u16), 0x50 + i as u8);
@@ -19,7 +29,7 @@ fn run_cpu_test(instrs: &[u8], num_steps: usize) -> (Cpu, MockInterconnect, u16)
 
     let mut cycles = 0;
     for _ in 0..num_steps {
-        cycles += vm.step();
+        cycles += vm.step(&mut device);
     }
 
     let (cpu, inter) = vm.get_children();
@@ -2275,6 +2285,89 @@ fn cpu_cf() {
     assert_eq!(cpu.f.h, false);
     assert_eq!(cpu.f.c, false);
     assert_eq!(cpu.pc, 0x100 + 2);
+}
+
+#[test]
+fn cpu_rl() {
+    // RLA
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x3e, 0x81, 0x17], 4);
+
+    assert_eq!(cycles, 20);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL A
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x3e, 0x81, 0xcb, 0x17], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.a, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL A - Zero
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0xcb, 0x17], 3);
+
+    assert_eq!(cycles, 16);
+    assert_eq!(cpu.a, 0);
+    assert_eq!(cpu.f.z, true);
+    assert_eq!(cpu.f.c, false);
+
+    // RL B
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x06, 0x81, 0xcb, 0x10], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.b, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL C
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x0e, 0x81, 0xcb, 0x11], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.c, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL D
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x16, 0x81, 0xcb, 0x12], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.d, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL E
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x1e, 0x81, 0xcb, 0x13], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.e, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL H
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x26, 0x81, 0xcb, 0x14], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.h, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL L
+    let (cpu, _, cycles) = run_cpu_test(&[0x37, 0x3f, 0x2e, 0x81, 0xcb, 0x15], 4);
+
+    assert_eq!(cycles, 24);
+    assert_eq!(cpu.l, 0x02);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, true);
+
+    // RL (HL)
+    let (cpu, inter, cycles) = run_cpu_test(&[0x37, 0x3f, 0x26, 0xc0, 0x2e, 0x01, 0xcb, 0x16], 5);
+
+    assert_eq!(cycles, 40);
+    assert_eq!(inter.read_byte(0xc001), 0xa2);
+    assert_eq!(cpu.f.z, false);
+    assert_eq!(cpu.f.c, false);
 }
 
 #[test]

@@ -1,4 +1,9 @@
 use mem_map::*;
+use device::Device;
+
+const COLOUR_MAP: [u32; 4] = [0xff7e8429, 0xff527a4b, 0xff315d4b, 0xff29473e];
+const WIDTH: usize = 160;
+const HEIGHT: usize = 144;
 
 pub struct Gpu {
     vram: Box<[u8]>, // VRAM - mapped to 0x8000 - 0x9FFF
@@ -87,8 +92,22 @@ impl Gpu {
             0xff49 => self.obj1_palette_data = val.into(),
             0xff4a => self.wy = val,
             0xff4b => self.wx = val,
-            _ => panic!("Read from non-gpu register in gpu {:04x}", addr),
+            _ => panic!("Write to non-gpu register in gpu {:04x} = {:02x}", addr, val),
         }
+    }
+
+    pub fn step(&mut self, cycles: u16, device: &mut Device) {
+        let mut buffer: Vec<u32> = vec![0xff7e8429; WIDTH * HEIGHT];
+
+        device.set_frame_buffer(&buffer);
+    }
+
+    pub fn get_width(&self) -> usize {
+        WIDTH
+    }
+
+    pub fn get_height(&self) -> usize {
+        HEIGHT
     }
 }
 

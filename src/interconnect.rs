@@ -3,6 +3,8 @@ use mem_map::*;
 use cartridge::Cartridge;
 use memory::Memory;
 use gpu::Gpu;
+use device::Device;
+use apu::Apu;
 
 pub trait Interconnect {
     fn read_byte(&self, addr: u16) -> u8;
@@ -10,11 +12,17 @@ pub trait Interconnect {
 
     fn write_byte(&mut self, addr: u16, val: u8);
     fn write_halfword(&mut self, addr: u16, val: u16);
+
+    fn step(&mut self, cycles: u16, device: &mut Device);
+
+    fn get_width(&self) -> usize;
+    fn get_height(&self) -> usize;
 }
 
 pub struct GBInterconnect {
     cartridge: Cartridge,
     gpu: Gpu,
+    apu: Apu,
 
     internal_ram: Memory,
     high_ram: Memory,
@@ -30,6 +38,7 @@ impl GBInterconnect {
         GBInterconnect {
             cartridge: cartridge,
             gpu: Gpu::new(),
+            apu: Apu::new(),
 
             internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
@@ -49,6 +58,7 @@ impl Interconnect for GBInterconnect {
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            0xff10...0xff3f => self.apu.read_reg(addr),
             0xff40...0xff4b => self.gpu.read_reg(addr),
             0xffff => self.ie_register,
             _ => panic!("Read from unrecognized memory segment {:04x}", addr),
@@ -66,6 +76,7 @@ impl Interconnect for GBInterconnect {
             }
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
             OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
+            0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xffff => self.ie_register = val,
             _ => {
@@ -89,6 +100,18 @@ impl Interconnect for GBInterconnect {
 
         self.write_byte(addr, lsb);
         self.write_byte(addr + 1, msb);
+    }
+
+    fn step(&mut self, cycles: u16, device: &mut Device) {
+        self.gpu.step(cycles, device);
+    }
+
+    fn get_width(&self) -> usize {
+        self.gpu.get_width()
+    }
+
+    fn get_height(&self) -> usize {
+        self.gpu.get_height()
     }
 }
 
@@ -131,5 +154,16 @@ impl Interconnect for MockInterconnect {
 
         self.write_byte(addr, lsb);
         self.write_byte(addr + 1, msb);
+    }
+
+    fn step(&mut self, cycles: u16, device: &mut Device) {
+    }
+
+    fn get_width(&self) -> usize {
+        0
+    }
+
+    fn get_height(&self) -> usize {
+        0
     }
 }

@@ -207,6 +207,10 @@ impl Cpu {
                 self.d = self.dec(val);
             }
             0x16 => self.d = self.read_pc_byte(interconnect), // LD D,n
+            0x17 => {
+                let val = self.a;
+                self.a = self.rotate_left(val);
+            }
             0x18 => {
                 // JR n - realtive jump by n
                 let n = self.read_pc_byte(interconnect);
@@ -815,6 +819,38 @@ impl Cpu {
                 // Extended instructions
                 let sub_instr = self.read_pc_byte(interconnect);
                 match sub_instr {
+                    0x10 => {
+                        let val = self.b;
+                        self.b = self.rotate_left(val);
+                    }
+                    0x11 => {
+                        let val = self.c;
+                        self.c = self.rotate_left(val);
+                    }
+                    0x12 => {
+                        let val = self.d;
+                        self.d = self.rotate_left(val);
+                    }
+                    0x13 => {
+                        let val = self.e;
+                        self.e = self.rotate_left(val);
+                    }
+                    0x14 => {
+                        let val = self.h;
+                        self.h = self.rotate_left(val);
+                    }
+                    0x15 => {
+                        let val = self.l;
+                        self.l = self.rotate_left(val);
+                    }
+                    0x16 => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.rotate_left(val));
+                    }
+                    0x17 => {
+                        let val = self.a;
+                        self.a = self.rotate_left(val);
+                    }
                     0x30 => {
                         // SWAP B
                         let val = self.b;
@@ -1159,6 +1195,18 @@ impl Cpu {
         self.f.z = val == 0;
 
         ((val & 0x0f) << 4) | ((val & 0xf0) >> 4)
+    }
+
+    fn rotate_left(&mut self, val: u8) -> u8 {
+        let carry = if self.f.c { 1 } else { 0 };
+        let ret = (val << 1) | carry;
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x80) != 0;
+
+        ret
     }
 
     pub fn bc(&self) -> u16 {
