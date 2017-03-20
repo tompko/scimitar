@@ -156,8 +156,7 @@ impl Interconnect for MockInterconnect {
         self.write_byte(addr + 1, msb);
     }
 
-    fn step(&mut self, cycles: u16, device: &mut Device) {
-    }
+    fn step(&mut self, _: u16, _: &mut Device) {}
 
     fn get_width(&self) -> usize {
         0

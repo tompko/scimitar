@@ -5,8 +5,7 @@ use gameboy::vm::VM;
 use gameboy::interconnect::{Interconnect, MockInterconnect};
 use gameboy::device::Device;
 
-struct MockDevice {
-}
+struct MockDevice {}
 
 impl Device for MockDevice {
     fn update(&mut self) {}
@@ -19,7 +18,7 @@ fn run_cpu_test(instrs: &[u8], num_steps: usize) -> (Cpu, MockInterconnect, u16)
         cart_bytes[i + 256] = *inst;
     }
     let mut interconnect = MockInterconnect::new(&cart_bytes);
-    let mut device = MockDevice{};
+    let mut device = MockDevice {};
 
     for i in 0..10 {
         interconnect.set_mem(0xc000 + (i as u16), 0x50 + i as u8);

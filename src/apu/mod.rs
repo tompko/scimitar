@@ -22,7 +22,7 @@ pub struct Apu {
     chan4_counter: u8,
     chan4_control: u8,
 
-    out_chan_control:u8,
+    out_chan_control: u8,
     output_terminal: u8,
     sound_active: u8,
 }
@@ -53,7 +53,7 @@ impl Apu {
             chan4_counter: 0,
             chan4_control: 0,
 
-            out_chan_control:0,
+            out_chan_control: 0,
             output_terminal: 0,
             sound_active: 0,
         }
@@ -111,7 +111,11 @@ impl Apu {
             0xff25 => self.output_terminal = val,
             0xff26 => self.sound_active = val,
             0xff30...0xff3f => self.chan3_data[(addr - 0xff30) as usize] = val,
-            _ => panic!("Write to non-apu register in apu {:04x} = {:02x}", addr, val),
+            _ => {
+                panic!("Write to non-apu register in apu {:04x} = {:02x}",
+                       addr,
+                       val)
+            }
         }
     }
 }

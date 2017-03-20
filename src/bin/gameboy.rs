@@ -82,14 +82,8 @@ fn main() {
         scale: Scale::X2,
     };
 
-    let mut window = Window::new(
-        "GBrs",
-        width,
-        height,
-        window_options,
-    ).unwrap();
+    let window = Window::new("GBrs", width, height, window_options).unwrap();
 
-    let mut buffer: Vec<u32> = vec![0; width * height];
     let mut device = ConsoleDevice::new(window, width, height);
 
     while device.window.is_open() && !device.window.is_key_down(Key::Escape) {
