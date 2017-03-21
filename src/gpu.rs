@@ -9,6 +9,7 @@ const HEIGHT: usize = 144;
 pub struct Gpu {
     vram: Box<[u8]>, // VRAM - mapped to 0x8000 - 0x9FFF
     obj_attr_table: Box<[u8]>, // Obj/Sprite Attribute Table (OAM) - mapped to 0xfe00 - 0xfea0
+    frame_buffer: Box<[u32]>,
 
     lcd_control: LcdControlReg, // 0xff40 - LCDC
     lcdc_status: LcdcStatusReg, // 0xff41 - STAT
@@ -22,6 +23,8 @@ pub struct Gpu {
     obj1_palette_data: PaletteDataReg, // 0xff49 OBJ1 palette data
     wy: u8, // 0xff4a - window Y position
     wx: u8, // 0xff4b - window X position, offset from screen coords by 7
+
+    cycles: u16,
 }
 
 impl Gpu {
@@ -29,6 +32,7 @@ impl Gpu {
         Gpu {
             vram: vec![0; VRAM_LENGTH as usize].into_boxed_slice(),
             obj_attr_table: vec![0; OAM_LENGTH as usize].into_boxed_slice(),
+            frame_buffer: vec![COLOUR_MAP[0]; WIDTH * HEIGHT].into_boxed_slice(),
 
             lcd_control: LcdControlReg::default(),
             lcdc_status: LcdcStatusReg::default(),
@@ -42,6 +46,8 @@ impl Gpu {
             obj0_palette_data: PaletteDataReg::default(),
             obj1_palette_data: PaletteDataReg::default(),
             dma_transfer: 0,
+
+            cycles: 0,
         }
     }
 
@@ -101,10 +107,14 @@ impl Gpu {
         }
     }
 
-    pub fn step(&mut self, _: u16, device: &mut Device) {
-        let buffer: Vec<u32> = vec![0xff7e8429; WIDTH * HEIGHT];
+    pub fn step(&mut self, cycles: u16, device: &mut Device) {
+        if !self.lcd_control.lcd_control_op {
+            return
+        }
 
-        device.set_frame_buffer(&buffer);
+        for _ in 0..cycles {
+            self.inner_step(device);
+        }
     }
 
     pub fn get_width(&self) -> usize {
@@ -113,6 +123,46 @@ impl Gpu {
 
     pub fn get_height(&self) -> usize {
         HEIGHT
+    }
+
+    fn inner_step(&mut self, device: &mut Device) {
+        self.cycles += 1;
+
+        if self.lcdc_status.mode == 0 && self.cycles == 4 {
+            if self.ly < 144 {
+                self.lcdc_status.mode = 2;
+            } else {
+                self.lcdc_status.mode = 1;
+                // TODO - trigger vblank
+
+                device.set_frame_buffer(&self.frame_buffer);
+            }
+        } else if self.lcdc_status.mode == 0 && self.cycles == 456 {
+            self.ly += 1;
+            self.cycles = 0;
+        } else if self.lcdc_status.mode == 1 {
+            if self.cycles == 456 {
+                self.cycles = 0;
+
+                if self.ly == 0 {
+                    self.lcdc_status.mode = 0;
+                } else {
+                    self.ly += 1;
+                }
+            } else if self.ly == 153 && self.cycles == 5 {
+                self.ly = 0;
+            }
+        } else if self.lcdc_status.mode == 2 && self.cycles == 85 {
+            self.lcdc_status.mode = 3;
+
+            self.render_background();
+        } else if self.lcdc_status.mode == 3 && self.cycles == 260 {
+            // TODO - this mode should have variable length
+            self.lcdc_status.mode = 0
+        }
+    }
+
+    fn render_background(&mut self) {
     }
 }
 
@@ -189,7 +239,7 @@ pub struct LcdcStatusReg {
     vblank_interrupt_enable: bool,
     hblank_interrupt_enable: bool,
     coincidence_flag: bool,
-    mode_flag: u8,
+    mode: u8,
 }
 
 impl From<u8> for LcdcStatusReg {
@@ -200,14 +250,14 @@ impl From<u8> for LcdcStatusReg {
             vblank_interrupt_enable: val & (1 << 4) != 0,
             hblank_interrupt_enable: val & (1 << 3) != 0,
             coincidence_flag: val & (1 << 2) != 0,
-            mode_flag: val & 0x3,
+            mode: val & 0x3,
         }
     }
 }
 
 impl Into<u8> for LcdcStatusReg {
     fn into(self) -> u8 {
-        let mut ret = self.mode_flag;
+        let mut ret = self.mode;
 
         if self.coincidence_interrupt_enable {
             ret |= 1 << 6;
