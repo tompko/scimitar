@@ -163,6 +163,47 @@ impl Gpu {
     }
 
     fn render_background(&mut self) {
+        let background_row = self.ly.wrapping_add(self.scy);
+
+        for i in 0..WIDTH as u8 {
+            let background_col = self.scx.wrapping_add(i);
+
+            let tile_offset = self.get_background_tile_offset(
+                background_row / 8,
+                background_col / 8
+            );
+            let colour = self.get_tile_pixel(
+                tile_offset,
+                background_row % 8,
+                background_col % 8
+            );
+
+            self.frame_buffer[(self.ly as usize * WIDTH) + i as usize] = colour;
+        }
+    }
+
+    // Returns the offset in self.vram of the background tile
+    fn get_background_tile_offset(&self, row: u8, col: u8) -> usize {
+        let tile_idx_base = if self.lcd_control.bg_tile_map_display { 0x1c00 } else { 0x1800 };
+        let tile_idx_offset = (row as usize * 32) + col as usize;
+        let tile_index = self.vram[tile_idx_base + tile_idx_offset];
+
+        if self.lcd_control.bg_win_tile_data {
+            tile_index as usize * 16
+        } else {
+            (((tile_index as i8) as isize) + 256) as usize * 16
+        }
+    }
+
+    fn get_tile_pixel(&self, tile_offset: usize, row: u8, col: u8) -> u32 {
+        let offset = tile_offset + (row as usize * 2);
+
+        let upper_col = self.vram[offset + 1] >> (7 - col) & 1;
+        let lower_col = self.vram[offset] >> (7 - col) & 1;
+        let tile_colour = upper_col << 1 | lower_col;
+
+        // TODO - lookup actual colour palette
+        COLOUR_MAP[tile_colour as usize]
     }
 }
 
@@ -176,13 +217,6 @@ pub struct LcdControlReg {
     window_display: bool,
     win_tile_map_display: bool,
     lcd_control_op: bool,
-}
-
-impl LcdControlReg {
-    fn default() -> Self {
-        // bg_window_display | bg_win_tile_data | lcd_control_op
-        0x91.into()
-    }
 }
 
 impl From<u8> for LcdControlReg {

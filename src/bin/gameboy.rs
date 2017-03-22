@@ -16,6 +16,8 @@ struct ConsoleDevice {
 
     width: usize,
     height: usize,
+
+    buffer_set: bool
 }
 
 impl ConsoleDevice {
@@ -25,6 +27,7 @@ impl ConsoleDevice {
             window: window,
             width: width,
             height: height,
+            buffer_set: false,
         }
 
     }
@@ -32,7 +35,10 @@ impl ConsoleDevice {
 
 impl Device for ConsoleDevice {
     fn update(&mut self) {
-        self.window.update_with_buffer(&*self.buffer);
+        if self.buffer_set {
+            self.window.update_with_buffer(&*self.buffer);
+            self.buffer_set = false;
+        }
     }
 
     fn set_frame_buffer(&mut self, buffer: &[u32]) {
@@ -42,6 +48,7 @@ impl Device for ConsoleDevice {
                 self.buffer[index as usize] = buffer[index as usize];
             }
         }
+        self.buffer_set = true;
     }
 }
 
