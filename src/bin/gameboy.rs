@@ -2,13 +2,20 @@
 extern crate clap;
 extern crate gameboy;
 extern crate minifb;
+extern crate time;
 
+use std::thread;
 use clap::{Arg, App};
 use minifb::{Key, Scale, WindowOptions, Window};
 use gameboy::vm::VM;
 use gameboy::cartridge::Cartridge;
 use gameboy::interconnect::{GBInterconnect, Interconnect};
 use gameboy::device::Device;
+use time::SteadyTime;
+
+// The Game Boy runs at 4194304 Hz which is 8192 clocks every 1953125 nanoseconds
+const SYNC_PERIOD_NS: i64 = 1953125;
+const SYNC_PERIOD_CLOCKS: i64 = 8192;
 
 struct ConsoleDevice {
     buffer: Box<[u32]>,
@@ -93,8 +100,25 @@ fn main() {
 
     let mut device = ConsoleDevice::new(window, width, height);
 
+    let mut start = SteadyTime::now();
+    let mut nsecs_elapsed = 0;
+    let mut cycles_to_run = 0;
+
     while device.window.is_open() && !device.window.is_key_down(Key::Escape) {
-        vm.step(&mut device);
-        device.update();
+        let now = SteadyTime::now();
+        let elapsed = now - start;
+        nsecs_elapsed += elapsed.num_nanoseconds().expect("Loop took too long");
+        start = now;
+
+        while nsecs_elapsed > SYNC_PERIOD_NS {
+            cycles_to_run += SYNC_PERIOD_CLOCKS;
+            while cycles_to_run > 0 {
+                cycles_to_run -= vm.step(&mut device) as i64;
+                device.update();
+            }
+            nsecs_elapsed -= SYNC_PERIOD_NS;
+        }
+
+        thread::sleep(time::Duration::milliseconds(3).to_std().unwrap());
     }
 }
