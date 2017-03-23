@@ -48,4 +48,8 @@ impl Cartridge {
             self.bytes[addr]
         }
     }
+
+    pub  fn disable_boot_rom(&mut self) {
+        self.boot_rom_active = false;
+    }
 }

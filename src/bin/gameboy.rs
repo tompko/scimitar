@@ -17,7 +17,7 @@ struct ConsoleDevice {
     width: usize,
     height: usize,
 
-    buffer_set: bool
+    buffer_set: bool,
 }
 
 impl ConsoleDevice {

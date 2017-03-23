@@ -69,16 +69,16 @@ impl Gpu {
 
     pub fn read_reg(&self, addr: u16) -> u8 {
         match addr {
-            0xff40 => self.lcd_control.clone().into(),
-            0xff41 => self.lcdc_status.clone().into(),
+            0xff40 => self.lcd_control.into(),
+            0xff41 => self.lcdc_status.into(),
             0xff42 => self.scy,
             0xff43 => self.scx,
             0xff44 => self.ly,
             0xff45 => self.lyc,
             0xff46 => self.dma_transfer,
-            0xff47 => self.bg_palette_data.clone().into(),
-            0xff48 => self.obj0_palette_data.clone().into(),
-            0xff49 => self.obj1_palette_data.clone().into(),
+            0xff47 => self.bg_palette_data.into(),
+            0xff48 => self.obj0_palette_data.into(),
+            0xff49 => self.obj1_palette_data.into(),
             0xff4a => self.wy,
             0xff4b => self.wx,
             _ => panic!("Read from non-gpu register in gpu {:04x}", addr),
@@ -109,7 +109,7 @@ impl Gpu {
 
     pub fn step(&mut self, cycles: u16, device: &mut Device) {
         if !self.lcd_control.lcd_control_op {
-            return
+            return;
         }
 
         for _ in 0..cycles {
@@ -168,15 +168,9 @@ impl Gpu {
         for i in 0..WIDTH as u8 {
             let background_col = self.scx.wrapping_add(i);
 
-            let tile_offset = self.get_background_tile_offset(
-                background_row / 8,
-                background_col / 8
-            );
-            let colour = self.get_tile_pixel(
-                tile_offset,
-                background_row % 8,
-                background_col % 8
-            );
+            let tile_offset = self.get_background_tile_offset(background_row / 8,
+                                                              background_col / 8);
+            let colour = self.get_tile_pixel(tile_offset, background_row % 8, background_col % 8);
 
             self.frame_buffer[(self.ly as usize * WIDTH) + i as usize] = colour;
         }
@@ -184,7 +178,11 @@ impl Gpu {
 
     // Returns the offset in self.vram of the background tile
     fn get_background_tile_offset(&self, row: u8, col: u8) -> usize {
-        let tile_idx_base = if self.lcd_control.bg_tile_map_display { 0x1c00 } else { 0x1800 };
+        let tile_idx_base = if self.lcd_control.bg_tile_map_display {
+            0x1c00
+        } else {
+            0x1800
+        };
         let tile_idx_offset = (row as usize * 32) + col as usize;
         let tile_index = self.vram[tile_idx_base + tile_idx_offset];
 
@@ -207,7 +205,7 @@ impl Gpu {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct LcdControlReg {
     bg_window_display: bool,
     obj_display: bool,
@@ -222,7 +220,7 @@ pub struct LcdControlReg {
 impl From<u8> for LcdControlReg {
     fn from(val: u8) -> Self {
         LcdControlReg {
-            bg_window_display: val & (1 << 0) != 0,
+            bg_window_display: val & 1 != 0,
             obj_display: val & (1 << 1) != 0,
             obj_size: val & (1 << 2) != 0,
             bg_tile_map_display: val & (1 << 3) != 0,
@@ -238,7 +236,7 @@ impl Into<u8> for LcdControlReg {
     fn into(self) -> u8 {
         let mut ret: u8 = 0;
         if self.bg_window_display {
-            ret |= 1 << 0;
+            ret |= 1;
         }
         if self.obj_display {
             ret |= 1 << 1;
@@ -266,7 +264,7 @@ impl Into<u8> for LcdControlReg {
 }
 
 
-#[derive(Default, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct LcdcStatusReg {
     coincidence_interrupt_enable: bool,
     oam_interrupt_enable: bool,
@@ -312,7 +310,7 @@ impl Into<u8> for LcdcStatusReg {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct PaletteDataReg {
     col0_shade: u8,
     col1_shade: u8,
