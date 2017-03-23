@@ -78,6 +78,7 @@ impl Interconnect for GBInterconnect {
             OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
+            0xff50 => self.cartridge.disable_boot_rom(),
             0xffff => self.ie_register = val,
             _ => {
                 panic!("Write to unrecognized memory segment {:04x} = {:02x}",
