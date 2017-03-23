@@ -8,3 +8,4 @@ mod mem_map;
 mod memory;
 mod gpu;
 mod apu;
+mod timer;

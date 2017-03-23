@@ -5,6 +5,7 @@ use memory::Memory;
 use gpu::Gpu;
 use device::Device;
 use apu::Apu;
+use timer::Timer;
 
 pub trait Interconnect {
     fn read_byte(&self, addr: u16) -> u8;
@@ -23,9 +24,11 @@ pub struct GBInterconnect {
     cartridge: Cartridge,
     gpu: Gpu,
     apu: Apu,
+    timer: Timer,
 
     internal_ram: Memory,
     high_ram: Memory,
+    if_register: u8,
     ie_register: u8,
 }
 
@@ -39,9 +42,12 @@ impl GBInterconnect {
             cartridge: cartridge,
             gpu: Gpu::new(),
             apu: Apu::new(),
+            timer: Timer::default(),
 
             internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
+
+            if_register: 0,
             ie_register: 0,
         }
     }
@@ -58,6 +64,8 @@ impl Interconnect for GBInterconnect {
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            0xff04...0xff07 => self.timer.read_reg(addr),
+            0xff0f => self.if_register,
             0xff10...0xff3f => self.apu.read_reg(addr),
             0xff40...0xff4b => self.gpu.read_reg(addr),
             0xffff => self.ie_register,
@@ -76,6 +84,8 @@ impl Interconnect for GBInterconnect {
             }
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
             OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
+            0xff04...0xff07 => self.timer.write_reg(addr, val),
+            0xff0f => self.if_register = val,
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.cartridge.disable_boot_rom(),
@@ -105,6 +115,7 @@ impl Interconnect for GBInterconnect {
 
     fn step(&mut self, cycles: u16, device: &mut Device) {
         self.gpu.step(cycles, device);
+        self.timer.step(cycles, device);
     }
 
     fn get_width(&self) -> usize {
