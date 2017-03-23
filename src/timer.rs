@@ -42,7 +42,10 @@ impl Timer {
     pub fn write_reg(&mut self, addr: u16, val: u8) {
         match addr {
             0xff04 => self.divider = 0,
-            0xff05 => {}, // TODO - confirm whether this is a nop
+            0xff05 => {
+                self.timer_counter = val;
+                self.tac_reload_delay = 0;
+            }
             0xff06 => self.timer_modulo = val,
             0xff07 => self.set_timer_control(val),
             _ => {
@@ -102,4 +105,3 @@ impl Timer {
         self.timer_clock_select = val & 0x3;
     }
 }
-
