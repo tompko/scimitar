@@ -57,6 +57,7 @@ impl Interconnect for GBInterconnect {
     fn read_byte(&self, addr: u16) -> u8 {
         match addr {
             ROM0_START...ROM0_END => self.cartridge.read_byte(addr - ROM0_START),
+            ROMSW_START...ROMSW_END => self.cartridge.read_sw_byte(addr - ROMSW_START),
             VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)

@@ -1,3 +1,5 @@
+extern crate strfmt;
+
 pub mod vm;
 pub mod cartridge;
 pub mod cpu;
@@ -9,3 +11,4 @@ mod memory;
 mod gpu;
 mod apu;
 mod timer;
+mod opcodes;

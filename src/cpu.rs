@@ -1,6 +1,9 @@
+use std::fmt::Write;
+use strfmt::{strfmt_map, Formatter};
 use interconnect::Interconnect;
+use opcodes::*;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Flags {
     pub z: bool,
     pub n: bool,
@@ -53,6 +56,8 @@ pub struct Cpu {
 
     pub instructions_to_di: u8,
     pub interrupts_enabled: bool,
+
+    halted: i8,
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -119,11 +124,28 @@ impl Cpu {
 
             instructions_to_di: 0,
             interrupts_enabled: true,
+
+            halted: 0,
         }
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
+        if self.halted == 1 {
+            // Step forward one NOP
+            return 4;
+        }
+
+        println!("{:<25} PC: 0x{:04X} AF: 0x{:04X} BC: 0x{:04X} DE: 0x{:04X} HL: 0x{:04X} SP: 0x{:04X}",
+            self.decode_instr(interconnect),
+            self.pc,
+            self.af(),
+            self.bc(),
+            self.de(),
+            self.hl(),
+            self.sp,
+        );
+
         let old_pc = self.pc;
         let instr = self.read_pc_byte(interconnect);
         let mut cycle_count = CYCLE_COUNTS[instr as usize];
@@ -469,6 +491,14 @@ impl Cpu {
             0x73 => interconnect.write_byte(self.hl(), self.e), // LD (HL), E
             0x74 => interconnect.write_byte(self.hl(), self.h), // LD (HL), H
             0x75 => interconnect.write_byte(self.hl(), self.l), // LD (HL), L
+            0x76 => {
+                // HALT
+                if interconnect.read_byte(0xffff) != 0 {
+                    self.halted = 1;
+                } else {
+                    self.halted = -1;
+                }
+            }
             0x77 => interconnect.write_byte(self.hl(), self.a), // LD (HL), A
             0x78 => self.a = self.b, // LD A, B
             0x79 => self.a = self.c, // LD A, C
@@ -801,6 +831,14 @@ impl Cpu {
 
                 self.pc = ((msb as u16) << 8) | lsb as u16;
             }
+            0xc4 => {
+                // CALL NZ, nn
+                let addr = self.read_pc_halfword(interconnect);
+
+                if !self.f.z {
+                    self.call(interconnect, addr);
+                }
+            }
             0xc5 => {
                 // PUSH BC
                 let halfword = self.bc();
@@ -900,14 +938,19 @@ impl Cpu {
                 }
                 cycle_count += CB_CYCLE_COUNTS[sub_instr as usize];
             }
+            0xcc => {
+                // CALL Z, nn - Call function at nn if zero flag is set
+                let addr = self.read_pc_halfword(interconnect);
+
+                if self.f.z {
+                    self.call(interconnect, addr);
+                }
+            }
             0xcd => {
                 // CALL nn - Call function at nn
-                let addr = interconnect.read_halfword(self.pc);
-                self.pc += 2;
+                let addr = self.read_pc_halfword(interconnect);
 
-                let pc = self.pc;
-                self.push_halfword(interconnect, pc);
-                self.pc = addr;
+                self.call(interconnect, addr);
             }
             0xce => {
                 // ADDC A, n
@@ -924,6 +967,14 @@ impl Cpu {
                 self.d = d;
                 self.e = e;
             }
+            0xd4 => {
+                // CALL NC, nn - Call function at nn if carry flag is not set
+                let addr = self.read_pc_halfword(interconnect);
+
+                if !self.f.c {
+                    self.call(interconnect, addr);
+                }
+            }
             0xd5 => {
                 // PUSH DE
                 let halfword = self.de();
@@ -933,6 +984,14 @@ impl Cpu {
                 // SUB A, n
                 let n = self.read_pc_byte(interconnect);
                 self.a = self.subc(n, false);
+            }
+            0xdc => {
+                // CALL C, nn - Call function at nn if carry flag is set
+                let addr = self.read_pc_halfword(interconnect);
+
+                if self.f.c {
+                    self.call(interconnect, addr);
+                }
             }
             0xde => {
                 // SUBC A, n
@@ -1059,7 +1118,11 @@ impl Cpu {
 
     fn read_pc_byte(&mut self, interconnect: &Interconnect) -> u8 {
         let val = interconnect.read_byte(self.pc);
-        self.pc += 1;
+        if self.halted == -1 {
+            self.halted = 0;
+        } else {
+            self.pc += 1;
+        }
         val
     }
 
@@ -1094,6 +1157,12 @@ impl Cpu {
         let val = interconnect.read_byte(self.sp);
         self.sp += 1;
         val
+    }
+
+    fn call(&mut self, interconnect: &mut Interconnect, addr: u16) {
+        let pc = self.pc;
+        self.push_halfword(interconnect, pc);
+        self.pc = addr;
     }
 
     fn addc(&mut self, val: u8, carry: bool) -> u8 {
@@ -1209,6 +1278,11 @@ impl Cpu {
         ret
     }
 
+    pub fn af(&self) -> u16 {
+        let f: u8 = self.f.into();
+        ((self.a as u16) << 8) | (f as u16)
+    }
+
     pub fn bc(&self) -> u16 {
         ((self.b as u16) << 8) | (self.c as u16)
     }
@@ -1235,7 +1309,38 @@ impl Cpu {
         self.h = (val >> 8) as u8;
         self.l = (val & 0xff) as u8;
     }
+
+    fn decode_instr(&self, interconnect: &Interconnect) -> String {
+        let instr = interconnect.read_byte(self.pc);
+        let mut offset = self.pc;
+        let opcode_string = if instr == 0xcb {
+            let subcode = interconnect.read_byte(self.pc + 1);
+            offset += 1;
+            CBOPCODES[subcode as usize]
+        } else {
+            OPCODES[instr as usize]
+        };
+
+        let n0 = interconnect.read_byte(offset + 1);
+        let n1 = interconnect.read_byte(offset + 2);
+
+        if opcode_string == "" {
+            panic!("No opcode string for op {}/{:02x}", instr, instr);
+        }
+
+        strfmt_map(opcode_string,
+                           &|mut fmt: Formatter| {
+                               match fmt.key {
+                                    "0" => fmt.write_str(&format!("{:02X}", n0)).unwrap(),
+                                    "1" => fmt.write_str(&format!("{:02X}", n1)).unwrap(),
+                                    _ => unreachable!(),
+                               }
+                               Ok(())
+                           }).unwrap()
+
+    }
 }
+
 
 impl Default for Cpu {
     fn default() -> Self {
