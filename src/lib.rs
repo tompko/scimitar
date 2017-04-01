@@ -1,4 +1,5 @@
 extern crate strfmt;
+extern crate time;
 
 pub mod vm;
 pub mod cartridge;

@@ -1,6 +1,12 @@
+use std::thread;
 use interconnect::Interconnect;
 use cpu::Cpu;
 use device::Device;
+use time::{self, SteadyTime};
+
+// The Game Boy runs at 4194304 Hz which is 8192 clocks every 1953125 nanoseconds
+const SYNC_PERIOD_NS: i64 = 1953125;
+const SYNC_PERIOD_CLOCKS: i64 = 8192;
 
 pub struct VM<T: Interconnect> {
     cpu: Cpu,
@@ -68,6 +74,30 @@ impl<T: Interconnect> VM<T> {
         self.inter.step(cycles, device);
 
         cycles
+    }
+
+    pub fn run(&mut self, device: &mut Device) {
+    let mut start = SteadyTime::now();
+    let mut nsecs_elapsed = 0;
+    let mut cycles_to_run = 0;
+
+    while device.running() {
+        let now = SteadyTime::now();
+        let elapsed = now - start;
+        nsecs_elapsed += elapsed.num_nanoseconds().expect("Loop took too long");
+        start = now;
+
+        while nsecs_elapsed > SYNC_PERIOD_NS {
+            cycles_to_run += SYNC_PERIOD_CLOCKS;
+            while cycles_to_run > 0 {
+                cycles_to_run -= self.step(device) as i64;
+                device.update();
+            }
+            nsecs_elapsed -= SYNC_PERIOD_NS;
+        }
+
+        thread::sleep(time::Duration::milliseconds(3).to_std().unwrap());
+    }
     }
 
     pub fn get_children(self) -> (Cpu, T) {
