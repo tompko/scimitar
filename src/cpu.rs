@@ -58,6 +58,7 @@ pub struct Cpu {
     pub interrupts_enabled: bool,
 
     halted: i8,
+    total_cycles: u64,
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -126,6 +127,7 @@ impl Cpu {
             interrupts_enabled: true,
 
             halted: 0,
+            total_cycles: 0,
         }
     }
 
@@ -136,7 +138,8 @@ impl Cpu {
             return 4;
         }
 
-        println!("{:<25} PC: 0x{:04X} AF: 0x{:04X} BC: 0x{:04X} DE: 0x{:04X} HL: 0x{:04X} SP: 0x{:04X}",
+        println!("{}: {:<25} PC: 0x{:04X} AF: 0x{:04X} BC: 0x{:04X} DE: 0x{:04X} HL: 0x{:04X} SP: 0x{:04X}",
+            self.total_cycles,
             self.decode_instr(interconnect),
             self.pc,
             self.af(),
@@ -1113,6 +1116,7 @@ impl Cpu {
             }
         }
 
+        self.total_cycles += cycle_count as u64;
         cycle_count
     }
 
@@ -1312,9 +1316,9 @@ impl Cpu {
 
     fn decode_instr(&self, interconnect: &Interconnect) -> String {
         let instr = interconnect.read_byte(self.pc);
+        let subcode = interconnect.read_byte(self.pc + 1);
         let mut offset = self.pc;
         let opcode_string = if instr == 0xcb {
-            let subcode = interconnect.read_byte(self.pc + 1);
             offset += 1;
             CBOPCODES[subcode as usize]
         } else {
@@ -1325,7 +1329,7 @@ impl Cpu {
         let n1 = interconnect.read_byte(offset + 2);
 
         if opcode_string == "" {
-            panic!("No opcode string for op {}/{:02x}", instr, instr);
+            panic!("No opcode string for op {0}/{0:02x} ({1}/{1:02x})", instr, subcode);
         }
 
         strfmt_map(opcode_string,
