@@ -1,5 +1,4 @@
 use interconnect::Interconnect;
-use opcodes::*;
 
 #[derive(Clone, Copy)]
 pub struct Flags {
@@ -127,7 +126,7 @@ impl Cpu {
         }
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
+    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, cyclomatic_complexity))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
         let interrupt_flags = interconnect.read_byte(0xff0f);
         let interrupt_enable = interconnect.read_byte(0xffff);
@@ -2372,7 +2371,7 @@ impl Cpu {
             0xf5 => {
                 // PUSH AF
                 let a = self.a;
-                let f = self.f.clone();
+                let f = self.f;
 
                 self.push_byte(interconnect, a);
                 self.push_byte(interconnect, f.into());
@@ -2726,10 +2725,6 @@ impl Cpu {
     pub fn set_hl(&mut self, val: u16) {
         self.h = (val >> 8) as u8;
         self.l = (val & 0xff) as u8;
-    }
-
-    fn decode_instr(&self, interconnect: &Interconnect) -> Opcode {
-        decode_instr(interconnect, self.pc)
     }
 }
 

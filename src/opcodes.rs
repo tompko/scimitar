@@ -33,7 +33,7 @@ impl fmt::Display for Opcode {
             }
             Ok(())
         })
-        .unwrap())?;
+                       .unwrap())?;
 
         Ok(())
     }
@@ -572,7 +572,8 @@ pub fn decode_instr(interconnect: &Interconnect, addr: u16) -> Opcode {
 
     let n0 = interconnect.read_byte(offset + 1);
     let n1 = interconnect.read_byte(offset + 2);
-    let opcode_jr_dest = addr.wrapping_add(n0 as i8 as u16).wrapping_add(opcode_spec.opcode_length as u16);
+    let opcode_jr_dest = addr.wrapping_add(n0 as i8 as u16)
+        .wrapping_add(opcode_spec.opcode_length as u16);
 
     if opcode_spec.opcode_disasm == "" {
         panic!("No opcode string for op {0}/{0:02x} ({1}/{1:02x})",

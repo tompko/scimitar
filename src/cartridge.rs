@@ -1,7 +1,7 @@
 use std::io::{self, Read};
+use std::fmt;
 use std::fs::File;
 use std::path::Path;
-use mem_map::*;
 
 const ROM_TYPE_OFFSET: usize = 0x0147;
 
@@ -13,10 +13,21 @@ enum Mbc {
 impl From<u8> for Mbc {
     fn from(val: u8) -> Self {
         match val {
-           0x00 | 0x08 | 0x09 => Mbc::NONE,
-           0x01 | 0x02 | 0x03 => Mbc::MBC1,
-           _ => panic!("Unknown cartridge type {:02x}", val),
+            0x00 | 0x08 | 0x09 => Mbc::NONE,
+            0x01 | 0x02 | 0x03 => Mbc::MBC1,
+            _ => panic!("Unknown cartridge type {:02x}", val),
         }
+    }
+}
+
+impl fmt::Display for Mbc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f,
+               "{}",
+               match *self {
+                   Mbc::NONE => "None",
+                   Mbc::MBC1 => "MBC1",
+               })
     }
 }
 
@@ -41,6 +52,7 @@ impl Cartridge {
         println!("Loaded {:0x} bytes of cart", buffer.len());
         println!("{}", cart.name());
         println!("Cart type: {}", cart.type_name());
+        println!("MBC: {}", cart.mbc);
         println!("Rom Size: {}", cart.rom_size());
 
         Ok(cart)
@@ -77,15 +89,9 @@ impl Cartridge {
         let addr = addr as usize;
 
         match addr {
-            0...0x00ff if self.boot_rom_active => {
-                self.boot_rom[addr]
-            }
-            0...0x3fff => {
-                self.rom[addr]
-            }
-            0x4000...0x7fff => {
-                self.rom[(self.rom_bank * 0x4000) + (addr - 0x4000)]
-            }
+            0...0x00ff if self.boot_rom_active => self.boot_rom[addr],
+            0...0x3fff => self.rom[addr],
+            0x4000...0x7fff => self.rom[(self.rom_bank * 0x4000) + (addr - 0x4000)],
             _ => panic!("Unrecognized read address in cartridge {:04x}", addr),
         }
     }
@@ -93,7 +99,11 @@ impl Cartridge {
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x2000...0x3fff => self.rom_bank = val as usize,
-            _ => panic!("Unrecognized write address in cartridge {:04x}={:02x}", addr, val),
+            _ => {
+                panic!("Unrecognized write address in cartridge {:04x}={:02x}",
+                       addr,
+                       val)
+            }
         }
     }
 

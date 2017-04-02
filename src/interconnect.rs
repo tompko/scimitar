@@ -6,7 +6,7 @@ use gpu::Gpu;
 use device::Device;
 use apu::Apu;
 use timer::Timer;
-use gamepad:: Gamepad;
+use gamepad::Gamepad;
 
 pub struct Interconnect {
     cartridge: Cartridge,
@@ -21,6 +21,7 @@ pub struct Interconnect {
     ie_register: u8,
 
     serial_transfer_data: u8,
+    serial_control: u8,
 
     trigger_watchpoint: bool,
     pub watchpoints: HashSet<u16>,
@@ -42,6 +43,7 @@ impl Interconnect {
             ie_register: 0,
 
             serial_transfer_data: 0,
+            serial_control: 0,
 
             watchpoints: HashSet::new(),
             trigger_watchpoint: false,
@@ -52,22 +54,26 @@ impl Interconnect {
         match addr {
             ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
             VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
+            CRAM_START...CRAM_END => unimplemented!(),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
-            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
             0xff00 => self.gamepad.read_reg(),
+
+            // TODO - implement serial port (Link cable)
+            0xff01 | 0xff02 => 0,
+
             0xff04...0xff07 => self.timer.read_reg(addr),
             0xff0f => self.if_register,
             0xff10...0xff3f => self.apu.read_reg(addr),
-            0xff40...0xff4b => self.gpu.read_reg(addr),
+            0xff40...0xff4f => self.gpu.read_reg(addr),
+            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             0xffff => self.ie_register,
-            UNUSED_START...UNUSED_END => 0xff,
-            UNUSED2_START...UNUSED2_END => 0xff,
-            0xff00...0xfffe => 0xff,
-            _ => panic!("Read from unrecognized memory segment {:04x}", addr),
+
+            // Unused addresses return 0xff for reads
+            _ => 0xff,
         }
     }
 
@@ -79,6 +85,7 @@ impl Interconnect {
         match addr {
             ROM_START...ROM_END => self.cartridge.write(addr - ROM_START, val),
             VRAM_START...VRAM_END => self.gpu.write_vram(addr - VRAM_START, val),
+            CRAM_START...CRAM_END => unimplemented!(),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)
             }
@@ -88,25 +95,18 @@ impl Interconnect {
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
             OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
             0xff00 => self.gamepad.write_reg(val),
+
+            // TODO - implement serial port (Link cable)
             0xff01 => self.serial_transfer_data = val,
-            0xff02 => {
-                if val & 0x80 != 0 {
-                    print!("{}", self.serial_transfer_data as char);
-                }
-            }
+            0xff02 => self.serial_control = val,
+
             0xff04...0xff07 => self.timer.write_reg(addr, val),
             0xff0f => self.if_register = val,
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.cartridge.disable_boot_rom(),
             0xffff => self.ie_register = val,
-            UNUSED_START...UNUSED_END => {},
-            UNUSED2_START...UNUSED2_END => {},
-            _ => {
-                panic!("Write to unrecognized memory segment {:04x} = {:02x}",
-                       addr,
-                       val)
-            }
+            _ => {} // Writes to unused addresses have no effect
         }
     }
 

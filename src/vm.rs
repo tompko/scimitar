@@ -1,4 +1,4 @@
-use std::thread::{self, JoinHandle};
+use std::thread;
 use std::sync::mpsc::{channel, Receiver};
 use std::io::{stdin, stdout, Write};
 use std::collections::HashSet;
@@ -30,18 +30,17 @@ pub struct VM {
     cursor: u16,
     last_command: Option<Command>,
     stdin_receiver: Receiver<String>,
-    stdin_thread: JoinHandle<()>,
 }
 
 impl VM {
     pub fn new(interconnect: Interconnect, with_boot_rom: bool) -> VM {
         let (stdin_sender, stdin_receiver) = channel();
-        // TODO - should close this thread cleanly
-        let stdin_thread = thread::spawn(move || {
-            loop {
-                stdin_sender.send(read_stdin()).unwrap();
-            }
-        });
+
+        // Blocking stdin means it's impossible to join this thread, so we let
+        // the OS clean it up when we quit.
+        thread::spawn(move || loop {
+                          stdin_sender.send(read_stdin()).unwrap();
+                      });
 
         let mut cpu = Cpu::new();
         let mut interconnect = interconnect;
@@ -90,7 +89,7 @@ impl VM {
             interconnect.write_byte(0xffff, 0x00);
         }
 
-        let cursor= cpu.pc;
+        let cursor = cpu.pc;
 
         let vm = VM {
             inter: interconnect,
@@ -103,7 +102,6 @@ impl VM {
             cursor: cursor,
             last_command: None,
             stdin_receiver: stdin_receiver,
-            stdin_thread: stdin_thread,
         };
         if vm.mode == Mode::Debugging {
             vm.disassemble_instruction();
@@ -117,6 +115,7 @@ impl VM {
 
         let start_debugger = self.inter.step(cycles, device);
         let breakpoint = self.breakpoints.contains(&self.cpu.pc);
+
 
         (cycles, start_debugger || breakpoint)
     }
@@ -164,6 +163,7 @@ impl VM {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     fn run_debug_commands(&mut self, device: &mut Device) -> bool {
         while let Ok(command_string) = self.stdin_receiver.try_recv() {
             let command = match (command_string.parse(), self.last_command.clone()) {
@@ -224,7 +224,7 @@ impl VM {
                     self.cursor = old_cursor;
                 }
                 Ok(Command::Breakpoint) => {
-                    for addr in self.breakpoints.iter() {
+                    for addr in &self.breakpoints {
                         println!("* 0x{:08x}", addr);
                     }
                 }
@@ -237,7 +237,7 @@ impl VM {
                     }
                 }
                 Ok(Command::Watchpoint) => {
-                    for addr in self.inter.watchpoints.iter() {
+                    for addr in &self.inter.watchpoints {
                         println!("* 0x{:08x}", addr);
                     }
                 }
@@ -265,7 +265,7 @@ impl VM {
             }
         }
 
-        return false;
+        false
     }
 
     fn print_cursor(&self) {
@@ -291,7 +291,7 @@ impl VM {
 
 
 fn read_stdin() -> String {
-let mut input = String::new();
-stdin().read_line(&mut input).unwrap();
-input.trim().into()
+    let mut input = String::new();
+    stdin().read_line(&mut input).unwrap();
+    input.trim().into()
 }

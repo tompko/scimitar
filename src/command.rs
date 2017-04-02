@@ -38,12 +38,11 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
     let show_regs =
         choice([try(string("showregs")), try(string("r"))]).map(|_| Command::ShowRegs).boxed();
 
-    let step = (choice(
-                [try(string("step")), try(string("s")), try(string("next")), try(string("n"))]
-            ),
-                optional((spaces(), usize_()).map(|x| x.1)))
-            .map(|(_, count)| Command::Step(count.unwrap_or(1)))
-            .boxed();
+    let step =
+        (choice([try(string("step")), try(string("s")), try(string("next")), try(string("n"))]),
+         optional((spaces(), usize_()).map(|x| x.1)))
+                .map(|(_, count)| Command::Step(count.unwrap_or(1)))
+                .boxed();
 
     let continue_ =
         choice([try(string("continue")), try(string("c"))]).map(|_| Command::Continue).boxed();
@@ -114,7 +113,7 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
                 repeat]
                    .into_iter()
                    .map(|parser| (parser, eof()).map(|x| x.0))
-                   .map(|parser| try(parser))
+                   .map(try)
                    .collect::<Vec<_>>())
             .parse_stream(input)
 }

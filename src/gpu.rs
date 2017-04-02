@@ -81,7 +81,7 @@ impl Gpu {
             0xff49 => self.obj1_palette_data.into(),
             0xff4a => self.wy,
             0xff4b => self.wx,
-            _ => panic!("Read from non-gpu register in gpu {:04x}", addr),
+            _ => 0xff, // reads from unused addresses return 0xff
         }
     }
 
@@ -345,6 +345,7 @@ impl From<u8> for PaletteDataReg {
 
 impl Into<u8> for PaletteDataReg {
     fn into(self) -> u8 {
-        (self.col0_shade | (self.col1_shade << 2) | (self.col2_shade << 4) | (self.col3_shade << 6)) as u8
+        (self.col0_shade | (self.col1_shade << 2) | (self.col2_shade << 4) |
+         (self.col3_shade << 6)) as u8
     }
 }

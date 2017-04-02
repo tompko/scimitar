@@ -8,7 +8,7 @@ use minifb::{Key, Scale, WindowOptions, Window};
 use gameboy::vm::VM;
 use gameboy::cartridge::Cartridge;
 use gameboy::interconnect::Interconnect;
-use gameboy::device::Device;
+use gameboy::device::{self, Device};
 
 struct ConsoleDevice {
     buffer: Box<[u32]>,
@@ -49,6 +49,21 @@ impl Device for ConsoleDevice {
             }
         }
         self.buffer_set = true;
+    }
+
+    fn key_down(&self, key: device::Key) -> bool {
+        let key = match key {
+            device::Key::Up => Key::Up,
+            device::Key::Down => Key::Down,
+            device::Key::Left => Key::Left,
+            device::Key::Right => Key::Right,
+            device::Key::Backspace => Key::Backspace,
+            device::Key::Enter => Key::Enter,
+            device::Key::Z => Key::Z,
+            device::Key::X => Key::X,
+        };
+
+        self.window.is_key_down(key)
     }
 
     fn running(&self) -> bool {
