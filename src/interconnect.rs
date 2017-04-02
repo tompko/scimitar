@@ -47,8 +47,7 @@ impl Interconnect {
 
     pub fn read_byte(&self, addr: u16) -> u8 {
         match addr {
-            ROM0_START...ROM0_END => self.cartridge.read_byte(addr - ROM0_START),
-            ROMSW_START...ROMSW_END => self.cartridge.read_sw_byte(addr - ROMSW_START),
+            ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
             VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
@@ -61,6 +60,7 @@ impl Interconnect {
             0xff10...0xff3f => self.apu.read_reg(addr),
             0xff40...0xff4b => self.gpu.read_reg(addr),
             0xffff => self.ie_register,
+            0xff00...0xfffe => 0xff,
             _ => panic!("Read from unrecognized memory segment {:04x}", addr),
         }
     }
@@ -71,6 +71,7 @@ impl Interconnect {
         }
 
         match addr {
+            ROM_START...ROM_END => self.cartridge.write(addr - ROM_START, val),
             VRAM_START...VRAM_END => self.gpu.write_vram(addr - VRAM_START, val),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)

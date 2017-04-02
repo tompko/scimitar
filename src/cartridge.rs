@@ -3,11 +3,31 @@ use std::fs::File;
 use std::path::Path;
 use mem_map::*;
 
+const ROM_TYPE_OFFSET: usize = 0x0147;
+
+enum Mbc {
+    NONE,
+    MBC1,
+}
+
+impl From<u8> for Mbc {
+    fn from(val: u8) -> Self {
+        match val {
+           0x00 | 0x08 | 0x09 => Mbc::NONE,
+           0x01 | 0x02 | 0x03 => Mbc::MBC1,
+           _ => panic!("Unknown cartridge type {:02x}", val),
+        }
+    }
+}
+
 pub struct Cartridge {
-    bytes: Box<[u8]>,
+    rom: Box<[u8]>,
     boot_rom: Box<[u8]>,
 
     boot_rom_active: bool,
+
+    mbc: Mbc,
+    rom_bank: usize,
 }
 
 impl Cartridge {
@@ -40,29 +60,40 @@ impl Cartridge {
     pub fn from_bytes(bytes: &[u8]) -> Cartridge {
         let bytes_copy = bytes.to_vec();
 
+        let rom_type = bytes[ROM_TYPE_OFFSET];
+        let mbc: Mbc = rom_type.into();
+
         Cartridge {
-            bytes: bytes_copy.into_boxed_slice(),
+            rom: bytes_copy.into_boxed_slice(),
             boot_rom: Box::default(),
 
             boot_rom_active: false,
+            mbc: mbc,
+            rom_bank: 1,
         }
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
         let addr = addr as usize;
-        if self.boot_rom_active && addr < self.boot_rom.len() {
-            self.boot_rom[addr]
-        } else {
-            self.bytes[addr]
+
+        match addr {
+            0...0x00ff if self.boot_rom_active => {
+                self.boot_rom[addr]
+            }
+            0...0x3fff => {
+                self.rom[addr]
+            }
+            0x4000...0x7fff => {
+                self.rom[(self.rom_bank * 0x4000) + (addr - 0x4000)]
+            }
+            _ => panic!("Unrecognized read address in cartridge {:04x}", addr),
         }
     }
 
-    pub fn read_sw_byte(&self, addr: u16) -> u8 {
-        let addr = addr as usize;
-        match self.rom_type() {
-            0x00 => self.bytes[addr + ROM0_END as usize + 1],
-            0x01 => self.bytes[addr + ROM0_END as usize + 1],
-            _ => unimplemented!(),
+    pub fn write(&mut self, addr: u16, val: u8) {
+        match addr {
+            0x2000...0x3fff => self.rom_bank = val as usize,
+            _ => panic!("Unrecognized write address in cartridge {:04x}={:02x}", addr, val),
         }
     }
 
@@ -74,7 +105,7 @@ impl Cartridge {
         let mut ret = "".to_string();
 
         for i in 0..16 {
-            let c = self.bytes[0x0134 + i];
+            let c = self.rom[0x0134 + i];
             if c == 0 {
                 break;
             }
@@ -85,7 +116,7 @@ impl Cartridge {
     }
 
     fn rom_type(&self) -> u8 {
-        self.bytes[0x0147]
+        self.rom[0x0147]
     }
 
     fn type_name(&self) -> &'static str {
@@ -127,7 +158,7 @@ impl Cartridge {
     }
 
     fn rom_size(&self) -> &'static str {
-        match self.bytes[0x0148] {
+        match self.rom[0x0148] {
             0x00 => "32KByte (no ROM banking)",
             0x01 => "64KByte (4 banks)",
             0x02 => "128KByte (8 banks)",
