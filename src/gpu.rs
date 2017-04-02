@@ -207,8 +207,14 @@ impl Gpu {
         let lower_col = self.vram[offset] >> (7 - col) & 1;
         let tile_colour = upper_col << 1 | lower_col;
 
-        // TODO - lookup actual colour palette
-        COLOUR_MAP[tile_colour as usize]
+        let col_index = match tile_colour {
+            0 => self.bg_palette_data.col0_shade,
+            1 => self.bg_palette_data.col1_shade,
+            2 => self.bg_palette_data.col2_shade,
+            3 => self.bg_palette_data.col3_shade,
+            _ => unreachable!(),
+        };
+        COLOUR_MAP[col_index]
     }
 }
 
@@ -319,14 +325,15 @@ impl Into<u8> for LcdcStatusReg {
 
 #[derive(Default, Copy, Clone)]
 pub struct PaletteDataReg {
-    col0_shade: u8,
-    col1_shade: u8,
-    col2_shade: u8,
-    col3_shade: u8,
+    col0_shade: usize,
+    col1_shade: usize,
+    col2_shade: usize,
+    col3_shade: usize,
 }
 
 impl From<u8> for PaletteDataReg {
     fn from(val: u8) -> Self {
+        let val = val as usize;
         PaletteDataReg {
             col0_shade: val & 0x3,
             col1_shade: (val >> 2) & 0x3,
@@ -338,6 +345,6 @@ impl From<u8> for PaletteDataReg {
 
 impl Into<u8> for PaletteDataReg {
     fn into(self) -> u8 {
-        self.col0_shade | (self.col1_shade << 2) | (self.col2_shade << 4) | (self.col3_shade << 6)
+        (self.col0_shade | (self.col1_shade << 2) | (self.col2_shade << 4) | (self.col3_shade << 6)) as u8
     }
 }
