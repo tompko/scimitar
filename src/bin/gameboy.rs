@@ -85,11 +85,17 @@ fn main() {
                  .short("b")
                  .long("boot-rom")
                  .takes_value(true))
+        .arg(Arg::with_name("debug")
+                 .help("If present, starts in debugging mode")
+                 .short("d")
+                 .long("debug")
+                 .takes_value(false))
         .get_matches();
 
     let input_file = matches.value_of("INPUT").unwrap();
     let mut cartridge = Cartridge::load(input_file).unwrap();
     let mut with_boot_rom = false;
+    let start_in_debug = matches.is_present("debug");
 
     if let Some(boot_file) = matches.value_of("boot-rom") {
         with_boot_rom = true;
@@ -99,7 +105,7 @@ fn main() {
     let width = interconnect.get_width();
     let height = interconnect.get_height();
 
-    let mut vm = VM::new(interconnect, with_boot_rom);
+    let mut vm = VM::new(interconnect, with_boot_rom, start_in_debug);
 
     let window_options = WindowOptions {
         borderless: false,

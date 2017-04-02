@@ -33,7 +33,7 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(interconnect: Interconnect, with_boot_rom: bool) -> VM {
+    pub fn new(interconnect: Interconnect, with_boot_rom: bool, start_in_debug: bool) -> VM {
         let (stdin_sender, stdin_receiver) = channel();
 
         // Blocking stdin means it's impossible to join this thread, so we let
@@ -95,7 +95,7 @@ impl VM {
             inter: interconnect,
             cpu: cpu,
 
-            mode: Mode::Running,
+            mode: if start_in_debug{ Mode::Debugging } else { Mode::Running },
             start_time: SteadyTime::now(),
 
             breakpoints: HashSet::new(),
