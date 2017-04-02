@@ -107,14 +107,17 @@ impl Gpu {
         }
     }
 
-    pub fn step(&mut self, cycles: u16, device: &mut Device) {
+    pub fn step(&mut self, cycles: u16, device: &mut Device) -> u8 {
         if !self.lcd_control.lcd_control_op {
-            return;
+            return 0;
         }
 
+        let mut ret = 0;
         for _ in 0..cycles {
-            self.inner_step(device);
+            ret |= self.inner_step(device);
         }
+
+        ret
     }
 
     pub fn get_width(&self) -> usize {
@@ -125,7 +128,8 @@ impl Gpu {
         HEIGHT
     }
 
-    fn inner_step(&mut self, device: &mut Device) {
+    fn inner_step(&mut self, device: &mut Device) -> u8 {
+        let mut ret = 0;
         self.cycles += 1;
 
         if self.lcdc_status.mode == 0 && self.cycles == 4 {
@@ -133,7 +137,8 @@ impl Gpu {
                 self.lcdc_status.mode = 2;
             } else {
                 self.lcdc_status.mode = 1;
-                // TODO - trigger vblank
+
+                ret |= 0x01;
 
                 device.set_frame_buffer(&self.frame_buffer);
             }
@@ -160,6 +165,8 @@ impl Gpu {
             // TODO - this mode should have variable length
             self.lcdc_status.mode = 0
         }
+
+        ret
     }
 
     fn render_background(&mut self) {

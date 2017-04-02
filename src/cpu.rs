@@ -1,5 +1,3 @@
-use std::fmt::Write;
-use strfmt::{strfmt_map, Formatter};
 use interconnect::Interconnect;
 use opcodes::*;
 
@@ -57,8 +55,7 @@ pub struct Cpu {
     pub instructions_to_di: u8,
     pub interrupts_enabled: bool,
 
-    halted: i8,
-    total_cycles: u64,
+    pub halted: i8,
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -127,27 +124,27 @@ impl Cpu {
             interrupts_enabled: true,
 
             halted: 0,
-            total_cycles: 0,
         }
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
-        if self.halted == 1 {
+        let interrupt_flags = interconnect.read_byte(0xff0f);
+        let interrupt_enable = interconnect.read_byte(0xffff);
+        let interrupt_request = interrupt_flags & interrupt_enable;
+
+        if self.halted == 1 && interrupt_request == 0 {
             // Step forward one NOP
             return 4;
         }
 
-        println!("{}: {:<25} PC: 0x{:04X} AF: 0x{:04X} BC: 0x{:04X} DE: 0x{:04X} HL: 0x{:04X} SP: 0x{:04X}",
-            self.total_cycles,
-            self.decode_instr(interconnect),
-            self.pc,
-            self.af(),
-            self.bc(),
-            self.de(),
-            self.hl(),
-            self.sp,
-        );
+        if self.halted == 1 && !self.interrupts_enabled {
+            self.halted = 0;
+        }
+
+        if self.interrupts_enabled && (interrupt_request != 0) {
+            self.handle_interrupt(interconnect, interrupt_flags, interrupt_enable);
+        }
 
         let old_pc = self.pc;
         let instr = self.read_pc_byte(interconnect);
@@ -178,6 +175,11 @@ impl Cpu {
                 self.b = self.dec(val);
             }
             0x06 => self.b = self.read_pc_byte(interconnect), // LD B,n
+            0x07 => {
+                let val = self.a;
+                self.a = self.rlc(val);
+                self.f.z = false;
+            }
             0x08 => {
                 // LD (nn), SP
                 let addr = self.read_pc_halfword(interconnect);
@@ -209,6 +211,12 @@ impl Cpu {
                 self.c = self.dec(val);
             }
             0x0e => self.c = self.read_pc_byte(interconnect), // LD C,n
+            0x0f => {
+                // RRC A
+                let val = self.a;
+                self.a = self.rrc(val);
+                self.f.z = false;
+            }
             0x11 => {
                 // LD DE, nn
                 let lsb = self.read_pc_byte(interconnect);
@@ -234,7 +242,8 @@ impl Cpu {
             0x16 => self.d = self.read_pc_byte(interconnect), // LD D,n
             0x17 => {
                 let val = self.a;
-                self.a = self.rotate_left(val);
+                self.a = self.rl(val);
+                self.f.z = false;
             }
             0x18 => {
                 // JR n - realtive jump by n
@@ -263,6 +272,12 @@ impl Cpu {
                 self.e = self.dec(val);
             }
             0x1e => self.e = self.read_pc_byte(interconnect), // LD E,n
+            0x1f => {
+                // RR A
+                let val = self.a;
+                self.a = self.rr(val);
+                self.f.z = false;
+            }
             0x20 => {
                 // JR NZ, n
                 let n = self.read_pc_byte(interconnect) as i8 as u16;
@@ -301,6 +316,35 @@ impl Cpu {
                 self.h = self.dec(val);
             }
             0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
+            0x27 => {
+                // DAA - Decimal adjust a
+                let mut val = self.a as u8;
+
+                if !self.f.n {
+                    if self.f.h || (val & 0xf) > 9 {
+                        let (res, overflow) = val.overflowing_add(0x06);
+                        self.f.c |= overflow;
+                        val = res;
+                    }
+                    if self.f.c || (val > 0x9f) {
+                        let (res, overflow) = val.overflowing_add(0x60);
+                        self.f.c |= overflow;
+                        val = res;
+                    }
+                } else {
+                    if self.f.h {
+                        val = val.wrapping_sub(0x06);
+                    }
+                    if self.f.c {
+                        val = val.wrapping_sub(0x60);
+                    }
+                }
+
+                self.f.h = false;
+                self.f.z = val == 0;
+
+                self.a = (val & 0xff) as u8;
+            }
             0x28 => {
                 // JR Z, n
                 let n = self.read_pc_byte(interconnect) as i8 as u16;
@@ -496,10 +540,10 @@ impl Cpu {
             0x75 => interconnect.write_byte(self.hl(), self.l), // LD (HL), L
             0x76 => {
                 // HALT
-                if interconnect.read_byte(0xffff) != 0 {
-                    self.halted = 1;
-                } else {
+                if !self.interrupts_enabled && interrupt_request != 0 {
                     self.halted = -1;
+                } else {
+                    self.halted = 1;
                 }
             }
             0x77 => interconnect.write_byte(self.hl(), self.a), // LD (HL), A
@@ -819,6 +863,12 @@ impl Cpu {
                 let val = self.a;
                 self.subc(val, false);
             }
+            0xc0 => {
+                // RET NZ - return if NZ
+                if !self.f.z {
+                    self.ret(interconnect);
+                }
+            }
             0xc1 => {
                 // POP BC
                 let c = self.pop_byte(interconnect);
@@ -826,6 +876,15 @@ impl Cpu {
 
                 self.b = b;
                 self.c = c;
+            }
+            0xc2 => {
+                // JP NZ, nn - Jump to address nn if NZ
+                let lsb = self.read_pc_byte(interconnect);
+                let msb = self.read_pc_byte(interconnect);
+
+                if !self.f.z {
+                    self.pc = ((msb as u16) << 8) | lsb as u16;
+                }
             }
             0xc3 => {
                 // JP nn - Jump to address nn
@@ -851,46 +910,223 @@ impl Cpu {
                 let n = self.read_pc_byte(interconnect);
                 self.a = self.addc(n, false);
             }
+            0xc7 => {
+                self.call(interconnect, 0x0000);
+            }
+            0xc8 => {
+                // RET Z - return if Z flag is set
+                if self.f.z {
+                    self.ret(interconnect);
+                }
+            }
             0xc9 => {
                 // RET - pop return address and jump there
-                let addr = self.pop_halfword(interconnect);
-                self.pc = addr;
+                self.ret(interconnect);
+            }
+            0xca => {
+                // JP Z, nn - Jump to address nn if Z
+                let lsb = self.read_pc_byte(interconnect);
+                let msb = self.read_pc_byte(interconnect);
+
+                if self.f.z {
+                    self.pc = ((msb as u16) << 8) | lsb as u16;
+                }
             }
             0xcb => {
                 // Extended instructions
                 let sub_instr = self.read_pc_byte(interconnect);
                 match sub_instr {
+                    0x00 => {
+                        let val = self.b;
+                        self.b = self.rlc(val);
+                    }
+                    0x01 => {
+                        let val = self.c;
+                        self.c = self.rlc(val);
+                    }
+                    0x02 => {
+                        let val = self.d;
+                        self.d = self.rlc(val);
+                    }
+                    0x03 => {
+                        let val = self.e;
+                        self.e = self.rlc(val);
+                    }
+                    0x04 => {
+                        let val = self.h;
+                        self.h = self.rlc(val);
+                    }
+                    0x05 => {
+                        let val = self.l;
+                        self.l = self.rlc(val);
+                    }
+                    0x06 => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.rlc(val));
+                    }
+                    0x07 => {
+                        let val = self.a;
+                        self.a = self.rlc(val);
+                    }
+                    0x08 => {
+                        let val = self.b;
+                        self.b = self.rrc(val);
+                    }
+                    0x09 => {
+                        let val = self.c;
+                        self.c = self.rrc(val);
+                    }
+                    0x0a => {
+                        let val = self.d;
+                        self.d = self.rrc(val);
+                    }
+                    0x0b => {
+                        let val = self.e;
+                        self.e = self.rrc(val);
+                    }
+                    0x0c => {
+                        let val = self.h;
+                        self.h = self.rrc(val);
+                    }
+                    0x0d => {
+                        let val = self.l;
+                        self.l = self.rrc(val);
+                    }
+                    0x0e => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.rrc(val));
+                    }
+                    0x0f => {
+                        let val = self.a;
+                        self.a = self.rrc(val);
+                    }
                     0x10 => {
                         let val = self.b;
-                        self.b = self.rotate_left(val);
+                        self.b = self.rl(val);
                     }
                     0x11 => {
                         let val = self.c;
-                        self.c = self.rotate_left(val);
+                        self.c = self.rl(val);
                     }
                     0x12 => {
                         let val = self.d;
-                        self.d = self.rotate_left(val);
+                        self.d = self.rl(val);
                     }
                     0x13 => {
                         let val = self.e;
-                        self.e = self.rotate_left(val);
+                        self.e = self.rl(val);
                     }
                     0x14 => {
                         let val = self.h;
-                        self.h = self.rotate_left(val);
+                        self.h = self.rl(val);
                     }
                     0x15 => {
                         let val = self.l;
-                        self.l = self.rotate_left(val);
+                        self.l = self.rl(val);
                     }
                     0x16 => {
                         let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.rotate_left(val));
+                        interconnect.write_byte(self.hl(), self.rl(val));
                     }
                     0x17 => {
                         let val = self.a;
-                        self.a = self.rotate_left(val);
+                        self.a = self.rl(val);
+                    }
+                    0x18 => {
+                        let val = self.b;
+                        self.b = self.rr(val);
+                    }
+                    0x19 => {
+                        let val = self.c;
+                        self.c = self.rr(val);
+                    }
+                    0x1a => {
+                        let val = self.d;
+                        self.d = self.rr(val);
+                    }
+                    0x1b => {
+                        let val = self.e;
+                        self.e = self.rr(val);
+                    }
+                    0x1c => {
+                        let val = self.h;
+                        self.h = self.rr(val);
+                    }
+                    0x1d => {
+                        let val = self.l;
+                        self.l = self.rr(val);
+                    }
+                    0x1e => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.rr(val));
+                    }
+                    0x1f => {
+                        let val = self.a;
+                        self.a = self.rr(val);
+                    }
+                    0x20 => {
+                        let val = self.b;
+                        self.b = self.sla(val);
+                    }
+                    0x21 => {
+                        let val = self.c;
+                        self.c = self.sla(val);
+                    }
+                    0x22 => {
+                        let val = self.d;
+                        self.d = self.sla(val);
+                    }
+                    0x23 => {
+                        let val = self.e;
+                        self.e = self.sla(val);
+                    }
+                    0x24 => {
+                        let val = self.h;
+                        self.h = self.sla(val);
+                    }
+                    0x25 => {
+                        let val = self.l;
+                        self.l = self.sla(val);
+                    }
+                    0x26 => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.sla(val));
+                    }
+                    0x27 => {
+                        let val = self.a;
+                        self.a = self.sla(val);
+                    }
+                    0x28 => {
+                        let val = self.b;
+                        self.b = self.sra(val);
+                    }
+                    0x29 => {
+                        let val = self.c;
+                        self.c = self.sra(val);
+                    }
+                    0x2a => {
+                        let val = self.d;
+                        self.d = self.sra(val);
+                    }
+                    0x2b => {
+                        let val = self.e;
+                        self.e = self.sra(val);
+                    }
+                    0x2c => {
+                        let val = self.h;
+                        self.h = self.sra(val);
+                    }
+                    0x2d => {
+                        let val = self.l;
+                        self.l = self.sra(val);
+                    }
+                    0x2e => {
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.sra(val));
+                    }
+                    0x2f => {
+                        let val = self.a;
+                        self.a = self.sra(val);
                     }
                     0x30 => {
                         // SWAP B
@@ -933,9 +1169,1005 @@ impl Cpu {
                         let val = self.a;
                         self.a = self.swap(val);
                     }
+                    0x38 => {
+                        // SRL B
+                        let val = self.b;
+                        self.b = self.srl(val);
+                    }
+                    0x39 => {
+                        // SRL C
+                        let val = self.c;
+                        self.c = self.srl(val);
+                    }
+                    0x3a => {
+                        // SRL D
+                        let val = self.d;
+                        self.d = self.srl(val);
+                    }
+                    0x3b => {
+                        // SRL E
+                        let val = self.e;
+                        self.e = self.srl(val);
+                    }
+                    0x3c => {
+                        // SRL H
+                        let val = self.h;
+                        self.h = self.srl(val);
+                    }
+                    0x3d => {
+                        // SRL L
+                        let val = self.l;
+                        self.l = self.srl(val);
+                    }
+                    0x3e => {
+                        // SRL (HL)
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.srl(val));
+                    }
+                    0x3f => {
+                        // SRL A
+                        let val = self.a;
+                        self.a = self.srl(val);
+                    }
+                    0x40 => {
+                        // BIT B, 0
+                        let val = self.b;
+                        self.bit(val, 0);
+                    }
+                    0x41 => {
+                        // BIT C, 0
+                        let val = self.c;
+                        self.bit(val, 0);
+                    }
+                    0x42 => {
+                        // BIT D, 0
+                        let val = self.d;
+                        self.bit(val, 0);
+                    }
+                    0x43 => {
+                        // BIT E, 0
+                        let val = self.e;
+                        self.bit(val, 0);
+                    }
+                    0x44 => {
+                        // BIT H, 0
+                        let val = self.h;
+                        self.bit(val, 0);
+                    }
+                    0x45 => {
+                        // BIT L, 0
+                        let val = self.l;
+                        self.bit(val, 0);
+                    }
+                    0x46 => {
+                        // BIT (HL), 0
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 0);
+                    }
+                    0x47 => {
+                        // BIT A, 0
+                        let val = self.a;
+                        self.bit(val, 0);
+                    }
+                    0x48 => {
+                        // BIT B, 1
+                        let val = self.b;
+                        self.bit(val, 1);
+                    }
+                    0x49 => {
+                        // BIT C, 1
+                        let val = self.c;
+                        self.bit(val, 1);
+                    }
+                    0x4a => {
+                        // BIT D, 1
+                        let val = self.d;
+                        self.bit(val, 1);
+                    }
+                    0x4b => {
+                        // BIT E, 1
+                        let val = self.e;
+                        self.bit(val, 1);
+                    }
+                    0x4c => {
+                        // BIT H, 1
+                        let val = self.h;
+                        self.bit(val, 1);
+                    }
+                    0x4d => {
+                        // BIT L, 1
+                        let val = self.l;
+                        self.bit(val, 1);
+                    }
+                    0x4e => {
+                        // BIT (HL), 1
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 1);
+                    }
+                    0x4f => {
+                        // BIT A, 1
+                        let val = self.a;
+                        self.bit(val, 1);
+                    }
+                    0x50 => {
+                        // BIT B, 2
+                        let val = self.b;
+                        self.bit(val, 2);
+                    }
+                    0x51 => {
+                        // BIT C, 2
+                        let val = self.c;
+                        self.bit(val, 2);
+                    }
+                    0x52 => {
+                        // BIT D, 2
+                        let val = self.d;
+                        self.bit(val, 2);
+                    }
+                    0x53 => {
+                        // BIT E, 2
+                        let val = self.e;
+                        self.bit(val, 2);
+                    }
+                    0x54 => {
+                        // BIT H, 2
+                        let val = self.h;
+                        self.bit(val, 2);
+                    }
+                    0x55 => {
+                        // BIT L, 2
+                        let val = self.l;
+                        self.bit(val, 2);
+                    }
+                    0x56 => {
+                        // BIT (HL), 2
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 2);
+                    }
+                    0x57 => {
+                        // BIT A, 2
+                        let val = self.a;
+                        self.bit(val, 2);
+                    }
+                    0x58 => {
+                        // BIT B, 3
+                        let val = self.b;
+                        self.bit(val, 3);
+                    }
+                    0x59 => {
+                        // BIT C, 3
+                        let val = self.c;
+                        self.bit(val, 3);
+                    }
+                    0x5a => {
+                        // BIT D, 3
+                        let val = self.d;
+                        self.bit(val, 3);
+                    }
+                    0x5b => {
+                        // BIT E, 3
+                        let val = self.e;
+                        self.bit(val, 3);
+                    }
+                    0x5c => {
+                        // BIT H, 3
+                        let val = self.h;
+                        self.bit(val, 3);
+                    }
+                    0x5d => {
+                        // BIT L, 3
+                        let val = self.l;
+                        self.bit(val, 3);
+                    }
+                    0x5e => {
+                        // BIT (HL), 3
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 3);
+                    }
+                    0x5f => {
+                        // BIT A, 3
+                        let val = self.a;
+                        self.bit(val, 3);
+                    }
+                    0x60 => {
+                        // BIT B, 4
+                        let val = self.b;
+                        self.bit(val, 4);
+                    }
+                    0x61 => {
+                        // BIT C, 4
+                        let val = self.c;
+                        self.bit(val, 4);
+                    }
+                    0x62 => {
+                        // BIT D, 4
+                        let val = self.d;
+                        self.bit(val, 4);
+                    }
+                    0x63 => {
+                        // BIT E, 4
+                        let val = self.e;
+                        self.bit(val, 4);
+                    }
+                    0x64 => {
+                        // BIT H, 4
+                        let val = self.h;
+                        self.bit(val, 4);
+                    }
+                    0x65 => {
+                        // BIT L, 4
+                        let val = self.l;
+                        self.bit(val, 4);
+                    }
+                    0x66 => {
+                        // BIT (HL), 4
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 4);
+                    }
+                    0x67 => {
+                        // BIT A, 4
+                        let val = self.a;
+                        self.bit(val, 4);
+                    }
+                    0x68 => {
+                        // BIT B, 5
+                        let val = self.b;
+                        self.bit(val, 5);
+                    }
+                    0x69 => {
+                        // BIT C, 5
+                        let val = self.c;
+                        self.bit(val, 5);
+                    }
+                    0x6a => {
+                        // BIT D, 5
+                        let val = self.d;
+                        self.bit(val, 5);
+                    }
+                    0x6b => {
+                        // BIT E, 5
+                        let val = self.e;
+                        self.bit(val, 5);
+                    }
+                    0x6c => {
+                        // BIT H, 5
+                        let val = self.h;
+                        self.bit(val, 5);
+                    }
+                    0x6d => {
+                        // BIT L, 5
+                        let val = self.l;
+                        self.bit(val, 5);
+                    }
+                    0x6e => {
+                        // BIT (HL), 5
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 5);
+                    }
+                    0x6f => {
+                        // BIT A, 5
+                        let val = self.a;
+                        self.bit(val, 5);
+                    }
+                    0x70 => {
+                        // BIT B, 6
+                        let val = self.b;
+                        self.bit(val, 6);
+                    }
+                    0x71 => {
+                        // BIT C, 6
+                        let val = self.c;
+                        self.bit(val, 6);
+                    }
+                    0x72 => {
+                        // BIT D, 6
+                        let val = self.d;
+                        self.bit(val, 6);
+                    }
+                    0x73 => {
+                        // BIT E, 6
+                        let val = self.e;
+                        self.bit(val, 6);
+                    }
+                    0x74 => {
+                        // BIT H, 6
+                        let val = self.h;
+                        self.bit(val, 6);
+                    }
+                    0x75 => {
+                        // BIT L, 6
+                        let val = self.l;
+                        self.bit(val, 6);
+                    }
+                    0x76 => {
+                        // BIT (HL), 6
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 6);
+                    }
+                    0x77 => {
+                        // BIT A, 6
+                        let val = self.a;
+                        self.bit(val, 6);
+                    }
+                    0x78 => {
+                        // BIT B, 7
+                        let val = self.b;
+                        self.bit(val, 7);
+                    }
+                    0x79 => {
+                        // BIT C, 7
+                        let val = self.c;
+                        self.bit(val, 7);
+                    }
+                    0x7a => {
+                        // BIT D, 7
+                        let val = self.d;
+                        self.bit(val, 7);
+                    }
+                    0x7b => {
+                        // BIT E, 7
+                        let val = self.e;
+                        self.bit(val, 7);
+                    }
                     0x7c => {
+                        // BIT H, 7
                         let val = self.h;
                         self.bit(val, 7);
+                    }
+                    0x7d => {
+                        // BIT L, 7
+                        let val = self.l;
+                        self.bit(val, 7);
+                    }
+                    0x7e => {
+                        // BIT (HL), 7
+                        let val = interconnect.read_byte(self.hl());
+                        self.bit(val, 7);
+                    }
+                    0x7f => {
+                        // BIT A, 7
+                        let val = self.a;
+                        self.bit(val, 7);
+                    }
+                    0x80 => {
+                        // RES B, 0
+                        let val = self.b;
+                        self.b = self.res(val, 0);
+                    }
+                    0x81 => {
+                        // RES C, 0
+                        let val = self.c;
+                        self.c = self.res(val, 0);
+                    }
+                    0x82 => {
+                        // RES D, 0
+                        let val = self.d;
+                        self.d = self.res(val, 0);
+                    }
+                    0x83 => {
+                        // RES E, 0
+                        let val = self.e;
+                        self.e = self.res(val, 0);
+                    }
+                    0x84 => {
+                        // RES H, 0
+                        let val = self.h;
+                        self.h = self.res(val, 0);
+                    }
+                    0x85 => {
+                        // RES L, 0
+                        let val = self.l;
+                        self.l = self.res(val, 0);
+                    }
+                    0x86 => {
+                        // RES (HL), 0
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 0));
+                    }
+                    0x87 => {
+                        // RES A, 0
+                        let val = self.a;
+                        self.a = self.res(val, 0);
+                    }
+                    0x88 => {
+                        // RES B, 1
+                        let val = self.b;
+                        self.b = self.res(val, 1);
+                    }
+                    0x89 => {
+                        // RES C, 1
+                        let val = self.c;
+                        self.c = self.res(val, 1);
+                    }
+                    0x8a => {
+                        // RES D, 1
+                        let val = self.d;
+                        self.d = self.res(val, 1);
+                    }
+                    0x8b => {
+                        // RES E, 1
+                        let val = self.e;
+                        self.e = self.res(val, 1);
+                    }
+                    0x8c => {
+                        // RES H, 1
+                        let val = self.h;
+                        self.h = self.res(val, 1);
+                    }
+                    0x8d => {
+                        // RES L, 1
+                        let val = self.l;
+                        self.l = self.res(val, 1);
+                    }
+                    0x8e => {
+                        // RES (HL), 1
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 1));
+                    }
+                    0x8f => {
+                        // RES A, 1
+                        let val = self.a;
+                        self.a = self.res(val, 1);
+                    }
+                    0x90 => {
+                        // RES B, 2
+                        let val = self.b;
+                        self.b = self.res(val, 2);
+                    }
+                    0x91 => {
+                        // RES C, 2
+                        let val = self.c;
+                        self.c = self.res(val, 2);
+                    }
+                    0x92 => {
+                        // RES D, 2
+                        let val = self.d;
+                        self.d = self.res(val, 2);
+                    }
+                    0x93 => {
+                        // RES E, 2
+                        let val = self.e;
+                        self.e = self.res(val, 2);
+                    }
+                    0x94 => {
+                        // RES H, 2
+                        let val = self.h;
+                        self.h = self.res(val, 2);
+                    }
+                    0x95 => {
+                        // RES L, 2
+                        let val = self.l;
+                        self.l = self.res(val, 2);
+                    }
+                    0x96 => {
+                        // RES (HL), 2
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 2));
+                    }
+                    0x97 => {
+                        // RES A, 2
+                        let val = self.a;
+                        self.a = self.res(val, 2);
+                    }
+                    0x98 => {
+                        // RES B, 3
+                        let val = self.b;
+                        self.b = self.res(val, 3);
+                    }
+                    0x99 => {
+                        // RES C, 3
+                        let val = self.c;
+                        self.c = self.res(val, 3);
+                    }
+                    0x9a => {
+                        // RES D, 3
+                        let val = self.d;
+                        self.d = self.res(val, 3);
+                    }
+                    0x9b => {
+                        // RES E, 3
+                        let val = self.e;
+                        self.e = self.res(val, 3);
+                    }
+                    0x9c => {
+                        // RES H, 3
+                        let val = self.h;
+                        self.h = self.res(val, 3);
+                    }
+                    0x9d => {
+                        // RES L, 3
+                        let val = self.l;
+                        self.l = self.res(val, 3);
+                    }
+                    0x9e => {
+                        // RES (HL), 3
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 3));
+                    }
+                    0x9f => {
+                        // RES A, 3
+                        let val = self.a;
+                        self.a = self.res(val, 3);
+                    }
+                    0xa0 => {
+                        // RES B, 4
+                        let val = self.b;
+                        self.b = self.res(val, 4);
+                    }
+                    0xa1 => {
+                        // RES C, 4
+                        let val = self.c;
+                        self.c = self.res(val, 4);
+                    }
+                    0xa2 => {
+                        // RES D, 4
+                        let val = self.d;
+                        self.d = self.res(val, 4);
+                    }
+                    0xa3 => {
+                        // RES E, 4
+                        let val = self.e;
+                        self.e = self.res(val, 4);
+                    }
+                    0xa4 => {
+                        // RES H, 4
+                        let val = self.h;
+                        self.h = self.res(val, 4);
+                    }
+                    0xa5 => {
+                        // RES L, 4
+                        let val = self.l;
+                        self.l = self.res(val, 4);
+                    }
+                    0xa6 => {
+                        // RES (HL), 4
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 4));
+                    }
+                    0xa7 => {
+                        // RES A, 4
+                        let val = self.a;
+                        self.a = self.res(val, 4);
+                    }
+                    0xa8 => {
+                        // RES B, 5
+                        let val = self.b;
+                        self.b = self.res(val, 5);
+                    }
+                    0xa9 => {
+                        // RES C, 5
+                        let val = self.c;
+                        self.c = self.res(val, 5);
+                    }
+                    0xaa => {
+                        // RES D, 5
+                        let val = self.d;
+                        self.d = self.res(val, 5);
+                    }
+                    0xab => {
+                        // RES E, 5
+                        let val = self.e;
+                        self.e = self.res(val, 5);
+                    }
+                    0xac => {
+                        // RES H, 5
+                        let val = self.h;
+                        self.h = self.res(val, 5);
+                    }
+                    0xad => {
+                        // RES L, 5
+                        let val = self.l;
+                        self.l = self.res(val, 5);
+                    }
+                    0xae => {
+                        // RES (HL), 5
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 5));
+                    }
+                    0xaf => {
+                        // RES A, 5
+                        let val = self.a;
+                        self.a = self.res(val, 5);
+                    }
+                    0xb0 => {
+                        // RES B, 6
+                        let val = self.b;
+                        self.b = self.res(val, 6);
+                    }
+                    0xb1 => {
+                        // RES C, 6
+                        let val = self.c;
+                        self.c = self.res(val, 6);
+                    }
+                    0xb2 => {
+                        // RES D, 6
+                        let val = self.d;
+                        self.d = self.res(val, 6);
+                    }
+                    0xb3 => {
+                        // RES E, 6
+                        let val = self.e;
+                        self.e = self.res(val, 6);
+                    }
+                    0xb4 => {
+                        // RES H, 6
+                        let val = self.h;
+                        self.h = self.res(val, 6);
+                    }
+                    0xb5 => {
+                        // RES L, 6
+                        let val = self.l;
+                        self.l = self.res(val, 6);
+                    }
+                    0xb6 => {
+                        // RES (HL), 6
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 6));
+                    }
+                    0xb7 => {
+                        // RES A, 6
+                        let val = self.a;
+                        self.a = self.res(val, 6);
+                    }
+                    0xb8 => {
+                        // RES B, 7
+                        let val = self.b;
+                        self.b = self.res(val, 7);
+                    }
+                    0xb9 => {
+                        // RES C, 7
+                        let val = self.c;
+                        self.c = self.res(val, 7);
+                    }
+                    0xba => {
+                        // RES D, 7
+                        let val = self.d;
+                        self.d = self.res(val, 7);
+                    }
+                    0xbb => {
+                        // RES E, 7
+                        let val = self.e;
+                        self.e = self.res(val, 7);
+                    }
+                    0xbc => {
+                        // RES H, 7
+                        let val = self.h;
+                        self.h = self.res(val, 7);
+                    }
+                    0xbd => {
+                        // RES L, 7
+                        let val = self.l;
+                        self.l = self.res(val, 7);
+                    }
+                    0xbe => {
+                        // RES (HL), 7
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.res(val, 7));
+                    }
+                    0xbf => {
+                        // RES A, 7
+                        let val = self.a;
+                        self.a = self.res(val, 7);
+                    }
+                    0xc0 => {
+                        // SET B, 0
+                        let val = self.b;
+                        self.b = self.set(val, 0);
+                    }
+                    0xc1 => {
+                        // SET C, 0
+                        let val = self.c;
+                        self.c = self.set(val, 0);
+                    }
+                    0xc2 => {
+                        // SET D, 0
+                        let val = self.d;
+                        self.d = self.set(val, 0);
+                    }
+                    0xc3 => {
+                        // SET E, 0
+                        let val = self.e;
+                        self.e = self.set(val, 0);
+                    }
+                    0xc4 => {
+                        // SET H, 0
+                        let val = self.h;
+                        self.h = self.set(val, 0);
+                    }
+                    0xc5 => {
+                        // SET L, 0
+                        let val = self.l;
+                        self.l = self.set(val, 0);
+                    }
+                    0xc6 => {
+                        // SET (HL), 0
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 0));
+                    }
+                    0xc7 => {
+                        // SET A, 0
+                        let val = self.a;
+                        self.a = self.set(val, 0);
+                    }
+                    0xc8 => {
+                        // SET B, 1
+                        let val = self.b;
+                        self.b = self.set(val, 1);
+                    }
+                    0xc9 => {
+                        // SET C, 1
+                        let val = self.c;
+                        self.c = self.set(val, 1);
+                    }
+                    0xca => {
+                        // SET D, 1
+                        let val = self.d;
+                        self.d = self.set(val, 1);
+                    }
+                    0xcb => {
+                        // SET E, 1
+                        let val = self.e;
+                        self.e = self.set(val, 1);
+                    }
+                    0xcc => {
+                        // SET H, 1
+                        let val = self.h;
+                        self.h = self.set(val, 1);
+                    }
+                    0xcd => {
+                        // SET L, 1
+                        let val = self.l;
+                        self.l = self.set(val, 1);
+                    }
+                    0xce => {
+                        // SET (HL), 1
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 1));
+                    }
+                    0xcf => {
+                        // SET A, 1
+                        let val = self.a;
+                        self.a = self.set(val, 1);
+                    }
+                    0xd0 => {
+                        // SET B, 2
+                        let val = self.b;
+                        self.b = self.set(val, 2);
+                    }
+                    0xd1 => {
+                        // SET C, 2
+                        let val = self.c;
+                        self.c = self.set(val, 2);
+                    }
+                    0xd2 => {
+                        // SET D, 2
+                        let val = self.d;
+                        self.d = self.set(val, 2);
+                    }
+                    0xd3 => {
+                        // SET E, 2
+                        let val = self.e;
+                        self.e = self.set(val, 2);
+                    }
+                    0xd4 => {
+                        // SET H, 2
+                        let val = self.h;
+                        self.h = self.set(val, 2);
+                    }
+                    0xd5 => {
+                        // SET L, 2
+                        let val = self.l;
+                        self.l = self.set(val, 2);
+                    }
+                    0xd6 => {
+                        // SET (HL), 2
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 2));
+                    }
+                    0xd7 => {
+                        // SET A, 2
+                        let val = self.a;
+                        self.a = self.set(val, 2);
+                    }
+                    0xd8 => {
+                        // SET B, 3
+                        let val = self.b;
+                        self.b = self.set(val, 3);
+                    }
+                    0xd9 => {
+                        // SET C, 3
+                        let val = self.c;
+                        self.c = self.set(val, 3);
+                    }
+                    0xda => {
+                        // SET D, 3
+                        let val = self.d;
+                        self.d = self.set(val, 3);
+                    }
+                    0xdb => {
+                        // SET E, 3
+                        let val = self.e;
+                        self.e = self.set(val, 3);
+                    }
+                    0xdc => {
+                        // SET H, 3
+                        let val = self.h;
+                        self.h = self.set(val, 3);
+                    }
+                    0xdd => {
+                        // SET L, 3
+                        let val = self.l;
+                        self.l = self.set(val, 3);
+                    }
+                    0xde => {
+                        // SET (HL), 3
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 3));
+                    }
+                    0xdf => {
+                        // SET A, 3
+                        let val = self.a;
+                        self.a = self.set(val, 3);
+                    }
+                    0xe0 => {
+                        // SET B, 4
+                        let val = self.b;
+                        self.b = self.set(val, 4);
+                    }
+                    0xe1 => {
+                        // SET C, 4
+                        let val = self.c;
+                        self.c = self.set(val, 4);
+                    }
+                    0xe2 => {
+                        // SET D, 4
+                        let val = self.d;
+                        self.d = self.set(val, 4);
+                    }
+                    0xe3 => {
+                        // SET E, 4
+                        let val = self.e;
+                        self.e = self.set(val, 4);
+                    }
+                    0xe4 => {
+                        // SET H, 4
+                        let val = self.h;
+                        self.h = self.set(val, 4);
+                    }
+                    0xe5 => {
+                        // SET L, 4
+                        let val = self.l;
+                        self.l = self.set(val, 4);
+                    }
+                    0xe6 => {
+                        // SET (HL), 4
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 4));
+                    }
+                    0xe7 => {
+                        // SET A, 4
+                        let val = self.a;
+                        self.a = self.set(val, 4);
+                    }
+                    0xe8 => {
+                        // SET B, 5
+                        let val = self.b;
+                        self.b = self.set(val, 5);
+                    }
+                    0xe9 => {
+                        // SET C, 5
+                        let val = self.c;
+                        self.c = self.set(val, 5);
+                    }
+                    0xea => {
+                        // SET D, 5
+                        let val = self.d;
+                        self.d = self.set(val, 5);
+                    }
+                    0xeb => {
+                        // SET E, 5
+                        let val = self.e;
+                        self.e = self.set(val, 5);
+                    }
+                    0xec => {
+                        // SET H, 5
+                        let val = self.h;
+                        self.h = self.set(val, 5);
+                    }
+                    0xed => {
+                        // SET L, 5
+                        let val = self.l;
+                        self.l = self.set(val, 5);
+                    }
+                    0xee => {
+                        // SET (HL), 5
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 5));
+                    }
+                    0xef => {
+                        // SET A, 5
+                        let val = self.a;
+                        self.a = self.set(val, 5);
+                    }
+                    0xf0 => {
+                        // SET B, 6
+                        let val = self.b;
+                        self.b = self.set(val, 6);
+                    }
+                    0xf1 => {
+                        // SET C, 6
+                        let val = self.c;
+                        self.c = self.set(val, 6);
+                    }
+                    0xf2 => {
+                        // SET D, 6
+                        let val = self.d;
+                        self.d = self.set(val, 6);
+                    }
+                    0xf3 => {
+                        // SET E, 6
+                        let val = self.e;
+                        self.e = self.set(val, 6);
+                    }
+                    0xf4 => {
+                        // SET H, 6
+                        let val = self.h;
+                        self.h = self.set(val, 6);
+                    }
+                    0xf5 => {
+                        // SET L, 6
+                        let val = self.l;
+                        self.l = self.set(val, 6);
+                    }
+                    0xf6 => {
+                        // SET (HL), 6
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 6));
+                    }
+                    0xf7 => {
+                        // SET A, 6
+                        let val = self.a;
+                        self.a = self.set(val, 6);
+                    }
+                    0xf8 => {
+                        // SET B, 7
+                        let val = self.b;
+                        self.b = self.set(val, 7);
+                    }
+                    0xf9 => {
+                        // SET C, 7
+                        let val = self.c;
+                        self.c = self.set(val, 7);
+                    }
+                    0xfa => {
+                        // SET D, 7
+                        let val = self.d;
+                        self.d = self.set(val, 7);
+                    }
+                    0xfb => {
+                        // SET E, 7
+                        let val = self.e;
+                        self.e = self.set(val, 7);
+                    }
+                    0xfc => {
+                        // SET H, 7
+                        let val = self.h;
+                        self.h = self.set(val, 7);
+                    }
+                    0xfd => {
+                        // SET L, 7
+                        let val = self.l;
+                        self.l = self.set(val, 7);
+                    }
+                    0xfe => {
+                        // SET (HL), 7
+                        let val = interconnect.read_byte(self.hl());
+                        interconnect.write_byte(self.hl(), self.set(val, 7));
+                    }
+                    0xff => {
+                        // SET A, 7
+                        let val = self.a;
+                        self.a = self.set(val, 7);
                     }
                     _ => panic!("Unrecognized extended instruction {:02x}", sub_instr),
                 }
@@ -962,6 +2194,16 @@ impl Cpu {
 
                 self.a = self.addc(val, carry);
             }
+            0xcf => {
+                // RST 08
+                self.call(interconnect, 0x0008);
+            }
+            0xd0 => {
+                // RET NC
+                if !self.f.c {
+                    self.ret(interconnect);
+                }
+            }
             0xd1 => {
                 // POP DE
                 let e = self.pop_byte(interconnect);
@@ -969,6 +2211,15 @@ impl Cpu {
 
                 self.d = d;
                 self.e = e;
+            }
+            0xd2 => {
+                // JP NC, nn - Jump to address nn if NC
+                let lsb = self.read_pc_byte(interconnect);
+                let msb = self.read_pc_byte(interconnect);
+
+                if !self.f.c {
+                    self.pc = ((msb as u16) << 8) | lsb as u16;
+                }
             }
             0xd4 => {
                 // CALL NC, nn - Call function at nn if carry flag is not set
@@ -988,6 +2239,30 @@ impl Cpu {
                 let n = self.read_pc_byte(interconnect);
                 self.a = self.subc(n, false);
             }
+            0xd7 => {
+                // RST 10
+                self.call(interconnect, 0x0010);
+            }
+            0xd8 => {
+                // RET C - return if the C flag is set
+                if self.f.c {
+                    self.ret(interconnect);
+                }
+            }
+            0xd9 => {
+                // RETI - return and enable interrupts
+                self.ret(interconnect);
+                self.interrupts_enabled = true;
+            }
+            0xda => {
+                // JP C, nn - Jump to address nn if C
+                let lsb = self.read_pc_byte(interconnect);
+                let msb = self.read_pc_byte(interconnect);
+
+                if self.f.c {
+                    self.pc = ((msb as u16) << 8) | lsb as u16;
+                }
+            }
             0xdc => {
                 // CALL C, nn - Call function at nn if carry flag is set
                 let addr = self.read_pc_halfword(interconnect);
@@ -1001,6 +2276,10 @@ impl Cpu {
                 let n = self.read_pc_byte(interconnect);
                 let carry = self.f.c;
                 self.a = self.subc(n, carry);
+            }
+            0xdf => {
+                // RST 18
+                self.call(interconnect, 0x0018);
             }
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
@@ -1034,18 +2313,26 @@ impl Cpu {
                 let val = self.read_pc_byte(interconnect);
                 self.a = self.and(val);
             }
+            0xe7 => {
+                // RST 20
+                self.call(interconnect, 0x0020);
+            }
             0xe8 => {
                 // ADD SP, n - Add 8 bit immediate to SP
                 let n = self.read_pc_byte(interconnect) as i8 as u16;
                 let sp = self.sp;
 
-                let (res, overflow) = sp.overflowing_add(n);
+                let res = sp.wrapping_add(n);
 
                 self.sp = res;
                 self.f.z = false;
                 self.f.n = false;
                 self.f.h = ((sp & 0x0f) + (n & 0xf)) > 0xf;
-                self.f.c = overflow;
+                self.f.c = ((sp & 0xff) + (n & 0xff)) > 0xff;
+            }
+            0xe9 => {
+                // JP (HL) - jump to the address contained in HL
+                self.pc = self.hl();
             }
             0xea => {
                 // LD nn, A - Store A to immediate address
@@ -1055,6 +2342,10 @@ impl Cpu {
             0xee => {
                 let val = self.read_pc_byte(interconnect);
                 self.a = self.xor(val);
+            }
+            0xef => {
+                // RST 28
+                self.call(interconnect, 0x0028);
             }
             0xf0 => {
                 let n = self.read_pc_byte(interconnect);
@@ -1090,10 +2381,20 @@ impl Cpu {
                 let val = self.read_pc_byte(interconnect);
                 self.a = self.or(val);
             }
+            0xf7 => {
+                // RST 30
+                self.call(interconnect, 0x0030);
+            }
             0xf8 => {
                 // LD HL, SP+n
-                let n = self.read_pc_byte(interconnect) as u16;
-                let addr = self.sp + n;
+                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let addr = self.sp.wrapping_add(n);
+
+                self.f.z = false;
+                self.f.n = false;
+                self.f.h = ((self.sp & 0x0f) + (n & 0xf)) > 0xf;
+                self.f.c = ((self.sp & 0xff) + (n & 0xff)) > 0xff;
+
                 self.h = (addr >> 8) as u8;
                 self.l = (addr & 0xff) as u8;
             }
@@ -1102,9 +2403,17 @@ impl Cpu {
                 let addr = self.read_pc_halfword(interconnect);
                 self.a = interconnect.read_byte(addr);
             }
+            0xfb => {
+                // EI
+                self.interrupts_enabled = true;
+            }
             0xfe => {
                 let val = self.read_pc_byte(interconnect);
                 self.subc(val, false);
+            }
+            0xff => {
+                // RST 38
+                self.call(interconnect, 0x0038);
             }
             _ => panic!("Unrecognized instruction {:02x} at {:04x}", instr, old_pc),
         }
@@ -1116,7 +2425,6 @@ impl Cpu {
             }
         }
 
-        self.total_cycles += cycle_count as u64;
         cycle_count
     }
 
@@ -1139,6 +2447,25 @@ impl Cpu {
 
     fn disable_interrupts(&mut self) {
         self.interrupts_enabled = false;
+    }
+
+    fn handle_interrupt(&mut self, interconnect: &mut Interconnect, int_f: u8, int_e: u8) {
+        let interrupt_vector = int_f & int_e;
+        let interrupt = interrupt_vector.trailing_zeros();
+
+        let addr = match interrupt {
+            0 => 0x0040,
+            1 => 0x0048,
+            2 => 0x0050,
+            3 => 0x0058,
+            4 => 0x0060,
+            _ => unreachable!(),
+        };
+
+        interconnect.write_byte(0xff0f, int_f & !(1 << interrupt));
+
+        self.call(interconnect, addr);
+        self.halted = 0;
     }
 
     fn push_halfword(&mut self, interconnect: &mut Interconnect, addr: u16) {
@@ -1166,6 +2493,11 @@ impl Cpu {
     fn call(&mut self, interconnect: &mut Interconnect, addr: u16) {
         let pc = self.pc;
         self.push_halfword(interconnect, pc);
+        self.pc = addr;
+    }
+
+    fn ret(&mut self, interconnect: &mut Interconnect) {
+        let addr = self.pop_halfword(interconnect);
         self.pc = addr;
     }
 
@@ -1264,13 +2596,26 @@ impl Cpu {
         self.f.h = true;
     }
 
-    fn swap(&mut self, val: u8) -> u8 {
-        self.f.z = val == 0;
-
-        ((val & 0x0f) << 4) | ((val & 0xf0) >> 4)
+    fn set(&mut self, val: u8, bit: u8) -> u8 {
+        val | (1 << bit)
     }
 
-    fn rotate_left(&mut self, val: u8) -> u8 {
+    fn res(&mut self, val: u8, bit: u8) -> u8 {
+        val & !(1 << bit)
+    }
+
+    fn swap(&mut self, val: u8) -> u8 {
+        let ret = ((val & 0x0f) << 4) | ((val & 0xf0) >> 4);
+
+        self.f.z = val == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = false;
+
+        ret
+    }
+
+    fn rl(&mut self, val: u8) -> u8 {
         let carry = if self.f.c { 1 } else { 0 };
         let ret = (val << 1) | carry;
 
@@ -1278,6 +2623,75 @@ impl Cpu {
         self.f.n = false;
         self.f.h = false;
         self.f.c = (val & 0x80) != 0;
+
+        ret
+    }
+
+    fn rlc(&mut self, val: u8) -> u8 {
+        let carry = val >> 7;
+        let ret = (val << 1) | carry;
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = carry != 0;
+
+        ret
+    }
+
+    fn rr(&mut self, val: u8) -> u8 {
+        let carry = if self.f.c { 1 } else { 0 };
+        let ret = (val >> 1) | (carry << 7);
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x01) != 0;
+
+        ret
+    }
+
+    fn rrc(&mut self, val: u8) -> u8 {
+        let carry = val & 0x01;
+        let ret = (val >> 1) | (carry << 7);
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x01) != 0;
+
+        ret
+    }
+
+    fn srl(&mut self, val: u8) -> u8 {
+        let ret = val >> 1;
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x01) != 0;
+
+        ret
+    }
+
+    fn sla(&mut self, val: u8) -> u8 {
+        let ret = val << 1;
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x80) != 0;
+
+        ret
+    }
+
+    fn sra(&mut self, val: u8) -> u8 {
+        let ret = (val & 0x80) | (val >> 1);
+
+        self.f.z = ret == 0;
+        self.f.n = false;
+        self.f.h = false;
+        self.f.c = (val & 0x01) != 0;
 
         ret
     }
@@ -1314,34 +2728,8 @@ impl Cpu {
         self.l = (val & 0xff) as u8;
     }
 
-    fn decode_instr(&self, interconnect: &Interconnect) -> String {
-        let instr = interconnect.read_byte(self.pc);
-        let subcode = interconnect.read_byte(self.pc + 1);
-        let mut offset = self.pc;
-        let opcode_string = if instr == 0xcb {
-            offset += 1;
-            CBOPCODES[subcode as usize]
-        } else {
-            OPCODES[instr as usize]
-        };
-
-        let n0 = interconnect.read_byte(offset + 1);
-        let n1 = interconnect.read_byte(offset + 2);
-
-        if opcode_string == "" {
-            panic!("No opcode string for op {0}/{0:02x} ({1}/{1:02x})", instr, subcode);
-        }
-
-        strfmt_map(opcode_string,
-                           &|mut fmt: Formatter| {
-                               match fmt.key {
-                                    "0" => fmt.write_str(&format!("{:02X}", n0)).unwrap(),
-                                    "1" => fmt.write_str(&format!("{:02X}", n1)).unwrap(),
-                                    _ => unreachable!(),
-                               }
-                               Ok(())
-                           }).unwrap()
-
+    fn decode_instr(&self, interconnect: &Interconnect) -> Opcode {
+        decode_instr(interconnect, self.pc)
     }
 }
 

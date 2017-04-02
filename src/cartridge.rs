@@ -18,10 +18,10 @@ impl Cartridge {
 
         let cart = Cartridge::from_bytes(&buffer);
 
-        // println!("Loaded {:0x} bytes of cart", buffer.len());
-        // println!("{}", cart.name());
-        // println!("Cart type: {}", cart.type_name());
-        // println!("Rom Size: {}", cart.rom_size());
+        println!("Loaded {:0x} bytes of cart", buffer.len());
+        println!("{}", cart.name());
+        println!("Cart type: {}", cart.type_name());
+        println!("Rom Size: {}", cart.rom_size());
 
         Ok(cart)
     }
@@ -60,8 +60,8 @@ impl Cartridge {
     pub fn read_sw_byte(&self, addr: u16) -> u8 {
         let addr = addr as usize;
         match self.rom_type() {
-            0x00 => self.bytes[addr + ROM0_END as usize],
-            0x01 => self.bytes[addr + ROM0_END as usize],
+            0x00 => self.bytes[addr + ROM0_END as usize + 1],
+            0x01 => self.bytes[addr + ROM0_END as usize + 1],
             _ => unimplemented!(),
         }
     }
@@ -76,7 +76,7 @@ impl Cartridge {
         for i in 0..16 {
             let c = self.bytes[0x0134 + i];
             if c == 0 {
-                break
+                break;
             }
             ret.push(c as char);
         }
@@ -128,15 +128,15 @@ impl Cartridge {
 
     fn rom_size(&self) -> &'static str {
         match self.bytes[0x0148] {
-            0x00 =>  "32KByte (no ROM banking)",
-            0x01 =>  "64KByte (4 banks)",
+            0x00 => "32KByte (no ROM banking)",
+            0x01 => "64KByte (4 banks)",
             0x02 => "128KByte (8 banks)",
             0x03 => "256KByte (16 banks)",
             0x04 => "512KByte (32 banks)",
-            0x05 =>   "1MByte (64 banks)  - only 63 banks used by MBC1",
-            0x06 =>   "2MByte (128 banks) - only 125 banks used by MBC1",
-            0x07 =>   "4MByte (256 banks)",
-            0x08 =>   "8MByte (512 banks)",
+            0x05 => "1MByte (64 banks)  - only 63 banks used by MBC1",
+            0x06 => "2MByte (128 banks) - only 125 banks used by MBC1",
+            0x07 => "4MByte (256 banks)",
+            0x08 => "8MByte (512 banks)",
             0x52 => "1.1MByte (72 banks)",
             0x53 => "1.2MByte (80 banks)",
             0x54 => "1.5MByte (96 banks)",

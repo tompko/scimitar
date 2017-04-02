@@ -7,7 +7,7 @@ use clap::{Arg, App};
 use minifb::{Key, Scale, WindowOptions, Window};
 use gameboy::vm::VM;
 use gameboy::cartridge::Cartridge;
-use gameboy::interconnect::{GBInterconnect, Interconnect};
+use gameboy::interconnect::Interconnect;
 use gameboy::device::Device;
 
 struct ConsoleDevice {
@@ -80,7 +80,7 @@ fn main() {
         with_boot_rom = true;
         cartridge.load_boot_rom(boot_file).unwrap();
     }
-    let interconnect = GBInterconnect::new(cartridge);
+    let interconnect = Interconnect::new(cartridge);
     let width = interconnect.get_width();
     let height = interconnect.get_height();
 

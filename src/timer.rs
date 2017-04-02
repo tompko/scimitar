@@ -57,30 +57,33 @@ impl Timer {
         self.divider_change();
     }
 
-    pub fn step(&mut self, cycles: u16, _: &mut Device) {
+    pub fn step(&mut self, cycles: u16, _: &mut Device) -> u8 {
+        let mut ret = 0;
         for _ in 0..cycles {
             if self.tac_reload_delay > 0 {
                 self.tac_reload_delay -= 1;
                 if self.tac_reload_delay == 0 {
                     self.timer_counter = self.timer_modulo;
-                    // TODO - raise timer interrupt
+                    ret |= 0x01 << 2;
                 }
             }
             self.divider = self.divider.wrapping_add(1);
 
             self.divider_change();
         }
+
+        ret
     }
 
     fn divider_change(&mut self) {
-        let new_delay = if self.timer_enable {
+        let new_delay = if !self.timer_enable {
             0
         } else {
             match self.timer_clock_select {
-                0 => self.divider >> 9 & 0x1,
-                1 => self.divider >> 3 & 0x1,
-                2 => self.divider >> 5 & 0x1,
-                3 => self.divider >> 7 & 0x1,
+                0 => (self.divider >> 9) & 0x1,
+                1 => (self.divider >> 3) & 0x1,
+                2 => (self.divider >> 5) & 0x1,
+                3 => (self.divider >> 7) & 0x1,
                 _ => unreachable!(),
             }
         };
@@ -92,6 +95,8 @@ impl Timer {
                 self.tac_reload_delay = 4;
             }
         }
+
+        self.tac_edge_delay = new_delay as u8;
     }
 
     fn timer_control(&self) -> u8 {
