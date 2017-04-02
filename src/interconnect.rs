@@ -6,12 +6,14 @@ use gpu::Gpu;
 use device::Device;
 use apu::Apu;
 use timer::Timer;
+use gamepad:: Gamepad;
 
 pub struct Interconnect {
     cartridge: Cartridge,
     gpu: Gpu,
     apu: Apu,
     timer: Timer,
+    gamepad: Gamepad,
 
     internal_ram: Memory,
     high_ram: Memory,
@@ -31,6 +33,7 @@ impl Interconnect {
             gpu: Gpu::new(),
             apu: Apu::new(),
             timer: Timer::default(),
+            gamepad: Gamepad::new(),
 
             internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
@@ -55,11 +58,14 @@ impl Interconnect {
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            0xff00 => self.gamepad.read_reg(),
             0xff04...0xff07 => self.timer.read_reg(addr),
             0xff0f => self.if_register,
             0xff10...0xff3f => self.apu.read_reg(addr),
             0xff40...0xff4b => self.gpu.read_reg(addr),
             0xffff => self.ie_register,
+            UNUSED_START...UNUSED_END => 0xff,
+            UNUSED2_START...UNUSED2_END => 0xff,
             0xff00...0xfffe => 0xff,
             _ => panic!("Read from unrecognized memory segment {:04x}", addr),
         }
@@ -81,6 +87,7 @@ impl Interconnect {
             }
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
             OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
+            0xff00 => self.gamepad.write_reg(val),
             0xff01 => self.serial_transfer_data = val,
             0xff02 => {
                 if val & 0x80 != 0 {
@@ -93,6 +100,8 @@ impl Interconnect {
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.cartridge.disable_boot_rom(),
             0xffff => self.ie_register = val,
+            UNUSED_START...UNUSED_END => {},
+            UNUSED2_START...UNUSED2_END => {},
             _ => {
                 panic!("Write to unrecognized memory segment {:04x} = {:02x}",
                        addr,
@@ -119,11 +128,14 @@ impl Interconnect {
     pub fn step(&mut self, cycles: u16, device: &mut Device) -> bool {
         let gpu_int = self.gpu.step(cycles, device);
         let timer_int = self.timer.step(cycles, device);
+        let gamepad_int = self.gamepad.step(cycles, device);
 
         let gpu_int_flag = gpu_int & self.ie_register;
         self.if_register |= gpu_int_flag;
         let timer_flag = timer_int & self.ie_register;
         self.if_register |= timer_flag;
+        let gamepad_flag = gamepad_int & self.ie_register;
+        self.if_register |= gamepad_flag;
 
         let trigger_watchpoint = self.trigger_watchpoint;
         self.trigger_watchpoint = false;
