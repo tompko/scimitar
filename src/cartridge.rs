@@ -33,12 +33,19 @@ impl fmt::Display for Mbc {
 
 pub struct Cartridge {
     rom: Box<[u8]>,
+    ram: Box<[u8]>,
     boot_rom: Box<[u8]>,
 
     boot_rom_active: bool,
 
     mbc: Mbc,
-    rom_bank: usize,
+    rom_bank_lower: usize,
+    bank_upper: usize,
+    ram_banking: bool,
+
+    rom_offsets: (usize, usize),
+    ram_bank_offset: usize,
+    ram_enabled: bool,
 }
 
 impl Cartridge {
@@ -77,28 +84,59 @@ impl Cartridge {
 
         Cartridge {
             rom: bytes_copy.into_boxed_slice(),
+            ram: vec![0; 0x10000].into_boxed_slice(),
             boot_rom: Box::default(),
 
             boot_rom_active: false,
             mbc: mbc,
-            rom_bank: 1,
+
+            rom_bank_lower: 1,
+            bank_upper: 0,
+            ram_banking: false,
+
+            rom_offsets: (0x0000, 0x4000),
+            ram_bank_offset: 0,
+            ram_enabled: false,
         }
     }
 
     pub fn read_byte(&self, addr: u16) -> u8 {
         let addr = addr as usize;
+        let (lower, upper) = self.rom_offsets;
 
         match addr {
             0...0x00ff if self.boot_rom_active => self.boot_rom[addr],
-            0...0x3fff => self.rom[addr],
-            0x4000...0x7fff => self.rom[(self.rom_bank * 0x4000) + (addr - 0x4000)],
+            0...0x3fff => self.rom[lower + addr],
+            0x4000...0x7fff => self.rom[upper + (addr - 0x4000)],
+            0xa000...0xbfff => {
+                self.ram[self.ram_bank_offset + (addr - 0xa000)]
+            }
             _ => panic!("Unrecognized read address in cartridge {:04x}", addr),
         }
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
+        let addr = addr as usize;
         match addr {
-            0x2000...0x3fff => self.rom_bank = val as usize,
+            0x0000...0x1fff => self.ram_enabled = (val & 0x0a) != 0,
+            0x2000...0x3fff => {
+                let val = (val as usize) & 0x1f;
+                self.rom_bank_lower = if val == 0x00 { 0x01 } else { val };
+                self.update_rom_offset();
+            }
+            0x4000...0x5fff => {
+                self.bank_upper = (val as usize) & 0x3;
+                self.update_rom_offset();
+                self.update_ram_offset();
+            }
+            0x6000...0x7fff => {
+                self.ram_banking = val != 0;
+                self.update_rom_offset();
+                self.update_ram_offset();
+            }
+            0xa000...0xbfff => {
+                self.ram[self.ram_bank_offset + (addr - 0xa000)] = val;
+            }
             _ => {
                 panic!("Unrecognized write address in cartridge {:04x}={:02x}",
                        addr,
@@ -109,6 +147,25 @@ impl Cartridge {
 
     pub fn disable_boot_rom(&mut self) {
         self.boot_rom_active = false;
+    }
+
+    fn update_rom_offset(&mut self) {
+        let bank_upper = self.bank_upper << 5;
+        let lower = if self.ram_banking { bank_upper } else { 0x00 };
+        let upper = bank_upper | self.rom_bank_lower;
+
+        let lower_bank = (lower * 0x4000) & (self.rom.len() - 1);
+        let upper_bank = (upper * 0x4000) & (self.rom.len() - 1);
+
+        self.rom_offsets = (lower_bank, upper_bank);
+    }
+
+    fn update_ram_offset(&mut self) {
+        self.ram_bank_offset = if self.ram_banking {
+            self.bank_upper * 0x2000
+        } else {
+            0
+        };
     }
 
     fn name(&self) -> String {

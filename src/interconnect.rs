@@ -54,7 +54,7 @@ impl Interconnect {
         match addr {
             ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
             VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
-            CRAM_START...CRAM_END => unimplemented!(),
+            CRAM_START...CRAM_END => self.cartridge.read_byte(addr - ROM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
@@ -85,7 +85,7 @@ impl Interconnect {
         match addr {
             ROM_START...ROM_END => self.cartridge.write(addr - ROM_START, val),
             VRAM_START...VRAM_END => self.gpu.write_vram(addr - VRAM_START, val),
-            CRAM_START...CRAM_END => unimplemented!(),
+            CRAM_START...CRAM_END => self.cartridge.write(addr - ROM_START, val),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)
             }
