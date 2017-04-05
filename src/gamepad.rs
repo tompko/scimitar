@@ -49,7 +49,7 @@ impl Gamepad {
     pub fn read_reg(&self) -> u8 {
         let mut ret = 0xc0;
 
-        if self.p15 {
+        if !self.p15 {
             if !self.a {
                 ret |= 1;
             }
@@ -63,7 +63,7 @@ impl Gamepad {
                 ret |= 1 << 3;
             }
         }
-        if self.p14 {
+        if !self.p14 {
             if !self.right {
                 ret |= 1;
             }
