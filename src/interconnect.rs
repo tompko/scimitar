@@ -25,6 +25,10 @@ pub struct Interconnect {
 
     trigger_watchpoint: bool,
     pub watchpoints: HashSet<u16>,
+
+    dma_source: u16,
+    dma_index: u16,
+    dma_active: bool,
 }
 
 impl Interconnect {
@@ -47,6 +51,10 @@ impl Interconnect {
 
             watchpoints: HashSet::new(),
             trigger_watchpoint: false,
+
+            dma_source: 0,
+            dma_index: 0,
+            dma_active: false,
         }
     }
 
@@ -103,6 +111,11 @@ impl Interconnect {
             0xff04...0xff07 => self.timer.write_reg(addr, val),
             0xff0f => self.if_register = val,
             0xff10...0xff3f => self.apu.write_reg(addr, val),
+            0xff46 => {
+                self.dma_source = addr;
+                self.dma_index = 0;
+                self.dma_active = true;
+            }
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.cartridge.disable_boot_rom(),
             0xffff => self.ie_register = val,
@@ -126,6 +139,17 @@ impl Interconnect {
     }
 
     pub fn step(&mut self, cycles: u16, device: &mut Device) -> bool {
+        if self.dma_active {
+            let index = self.dma_index;
+            let val = self.read_byte(self.dma_source + self.dma_index);
+            self.write_byte(OAM_START + index, val);
+            self.dma_index += 1;
+
+            if self.dma_index > 160 {
+                self.dma_active = false;
+            }
+        }
+
         let gpu_int = self.gpu.step(cycles, device);
         let timer_int = self.timer.step(cycles, device);
         let gamepad_int = self.gamepad.step(cycles, device);
