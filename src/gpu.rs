@@ -8,7 +8,7 @@ const HEIGHT: usize = 144;
 
 pub struct Gpu {
     vram: Box<[u8]>, // VRAM - mapped to 0x8000 - 0x9FFF
-    obj_attr_table: Box<[u8]>, // Obj/Sprite Attribute Table (OAM) - mapped to 0xfe00 - 0xfea0
+    oam: Box<[u8]>, // Obj/Sprite Attribute Table - mapped to 0xfe00 - 0xfea0
     frame_buffer: Box<[u32]>,
 
     lcd_control: LcdControlReg, // 0xff40 - LCDC
@@ -31,7 +31,7 @@ impl Gpu {
     pub fn new() -> Self {
         Gpu {
             vram: vec![0; VRAM_LENGTH as usize].into_boxed_slice(),
-            obj_attr_table: vec![0; OAM_LENGTH as usize].into_boxed_slice(),
+            oam: vec![0; OAM_LENGTH as usize].into_boxed_slice(),
             frame_buffer: vec![COLOUR_MAP[0]; WIDTH * HEIGHT].into_boxed_slice(),
 
             lcd_control: LcdControlReg::default(),
@@ -60,11 +60,11 @@ impl Gpu {
     }
 
     pub fn read_oam(&self, addr: u16) -> u8 {
-        self.obj_attr_table[addr as usize]
+        self.oam[addr as usize]
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
-        self.obj_attr_table[addr as usize] = val;
+        self.oam[addr as usize] = val;
     }
 
     pub fn read_reg(&self, addr: u16) -> u8 {
@@ -161,6 +161,10 @@ impl Gpu {
             self.lcdc_status.mode = 3;
 
             self.render_background();
+
+            if self.lcd_control.sprite_display {
+                self.render_sprites();
+            }
         } else if self.lcdc_status.mode == 3 && self.cycles == 260 {
             // TODO - this mode should have variable length
             self.lcdc_status.mode = 0
@@ -180,6 +184,30 @@ impl Gpu {
             let colour = self.get_tile_pixel(tile_offset, background_row % 8, background_col % 8);
 
             self.frame_buffer[(self.ly as usize * WIDTH) + i as usize] = colour;
+        }
+    }
+
+    fn render_sprites(&mut self) {
+        let sprite_height: i16 = if self.lcd_control.sprite_size { 16 } else { 8 };
+        let ly = self.ly as i16;
+
+        for i in 0..40 {
+            let sprite_y = (self.oam[i * 4] as i16) - 16;
+
+            if ly < sprite_y || (sprite_y + sprite_height - 1) < ly {
+                continue
+            }
+
+            let sprite_row = (ly - sprite_y) as usize;
+            let sprite_x = (self.oam[(i * 4) + 1] as i16) - 8;
+            let tile_index = self.oam[(i * 4) + 2] as usize;
+            let tile_offset = tile_index * (sprite_height as usize) * 2;
+
+            for i in 0..8 {
+                let colour = self.get_sprite_pixel(tile_offset, sprite_row, i);
+
+                self.frame_buffer[(ly as usize * WIDTH) + (sprite_x + i as i16) as usize] = colour;
+            }
         }
     }
 
@@ -216,13 +244,30 @@ impl Gpu {
         };
         COLOUR_MAP[col_index]
     }
+
+    fn get_sprite_pixel(&self, tile_offset: usize, row: usize, col: usize) -> u32 {
+        let offset = tile_offset + (row as usize * 2);
+
+        let upper_col = self.vram[offset + 1] >> (7 - col) & 1;
+        let lower_col = self.vram[offset] >> (7 - col) & 1;
+        let tile_colour = upper_col << 1 | lower_col;
+
+        let col_index = match tile_colour {
+            0 => self.obj0_palette_data.col0_shade,
+            1 => self.obj0_palette_data.col1_shade,
+            2 => self.obj0_palette_data.col2_shade,
+            3 => self.obj0_palette_data.col3_shade,
+            _ => unreachable!(),
+        };
+        COLOUR_MAP[col_index]
+    }
 }
 
 #[derive(Default, Copy, Clone)]
 pub struct LcdControlReg {
     bg_window_display: bool,
-    obj_display: bool,
-    obj_size: bool,
+    sprite_display: bool,
+    sprite_size: bool,
     bg_tile_map_display: bool,
     bg_win_tile_data: bool,
     window_display: bool,
@@ -234,8 +279,8 @@ impl From<u8> for LcdControlReg {
     fn from(val: u8) -> Self {
         LcdControlReg {
             bg_window_display: val & 1 != 0,
-            obj_display: val & (1 << 1) != 0,
-            obj_size: val & (1 << 2) != 0,
+            sprite_display: val & (1 << 1) != 0,
+            sprite_size: val & (1 << 2) != 0,
             bg_tile_map_display: val & (1 << 3) != 0,
             bg_win_tile_data: val & (1 << 4) != 0,
             window_display: val & (1 << 5) != 0,
@@ -251,10 +296,10 @@ impl Into<u8> for LcdControlReg {
         if self.bg_window_display {
             ret |= 1;
         }
-        if self.obj_display {
+        if self.sprite_display {
             ret |= 1 << 1;
         }
-        if self.obj_size {
+        if self.sprite_size {
             ret |= 1 << 2;
         }
         if self.bg_tile_map_display {
