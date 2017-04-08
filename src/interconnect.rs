@@ -112,7 +112,7 @@ impl Interconnect {
             0xff0f => self.if_register = val,
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff46 => {
-                self.dma_source = addr;
+                self.dma_source = (val as u16) << 8;
                 self.dma_index = 0;
                 self.dma_active = true;
             }
@@ -141,11 +141,11 @@ impl Interconnect {
     pub fn step(&mut self, cycles: u16, device: &mut Device) -> bool {
         if self.dma_active {
             let index = self.dma_index;
-            let val = self.read_byte(self.dma_source + self.dma_index);
+            let val = self.read_byte(self.dma_source + index);
             self.write_byte(OAM_START + index, val);
             self.dma_index += 1;
 
-            if self.dma_index > 160 {
+            if self.dma_index >= 160 {
                 self.dma_active = false;
             }
         }
