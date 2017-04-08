@@ -1,9 +1,9 @@
 use device::Device;
 
 pub struct Timer {
-    divider: u16,
-    timer_counter: u8,
-    timer_modulo: u8,
+    pub divider: u16,
+    pub timer_counter: u8,
+    pub timer_modulo: u8,
 
     timer_clock_select: u8,
     timer_enable: bool,
@@ -64,18 +64,26 @@ impl Timer {
                 self.tac_reload_delay -= 1;
                 if self.tac_reload_delay == 0 {
                     self.timer_counter = self.timer_modulo;
-                    ret |= 0x01 << 2;
                 }
             }
             self.divider = self.divider.wrapping_add(1);
 
-            self.divider_change();
+            let interrupt = self.divider_change();
+            if interrupt {
+                ret |= 0x01 << 2;
+            }
         }
 
         ret
     }
 
-    fn divider_change(&mut self) {
+    pub fn timer_control(&self) -> u8 {
+        let enabled = if self.timer_enable { 1 } else { 0 };
+
+        self.timer_clock_select | (enabled << 2)
+    }
+
+    fn divider_change(&mut self) -> bool {
         let new_delay = if !self.timer_enable {
             0
         } else {
@@ -88,21 +96,18 @@ impl Timer {
             }
         };
 
+        let mut ret = false;
         if self.tac_edge_delay == 1 && new_delay == 0 {
             let (counter, overflow) = self.timer_counter.overflowing_add(1);
             self.timer_counter = counter;
             if overflow {
+                ret = true;
                 self.tac_reload_delay = 4;
             }
         }
 
         self.tac_edge_delay = new_delay as u8;
-    }
-
-    fn timer_control(&self) -> u8 {
-        let enabled = if self.timer_enable { 1 } else { 0 };
-
-        self.timer_clock_select | (enabled << 2)
+        ret
     }
 
     fn set_timer_control(&mut self, val: u8) {

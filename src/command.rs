@@ -8,6 +8,7 @@ use std::borrow::Cow;
 #[derive(Debug, Clone)]
 pub enum Command {
     ShowRegs,
+    ShowIORegs,
     Step(usize),
     Continue,
     Goto(u16),
@@ -37,6 +38,9 @@ impl FromStr for Command {
 fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
     let show_regs =
         choice([try(string("showregs")), try(string("r"))]).map(|_| Command::ShowRegs).boxed();
+
+    let show_io_regs =
+        choice([try(string("showioregs")), try(string("ior"))]).map(|_| Command::ShowIORegs).boxed();
 
     let step =
         (choice([try(string("step")), try(string("s")), try(string("next")), try(string("n"))]),
@@ -98,6 +102,7 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
     let repeat = value(Command::Repeat).boxed();
 
     choice(vec![show_regs,
+                show_io_regs,
                 step,
                 continue_,
                 goto,

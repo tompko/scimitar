@@ -17,8 +17,8 @@ pub struct Interconnect {
 
     internal_ram: Memory,
     high_ram: Memory,
-    if_register: u8,
-    ie_register: u8,
+    pub if_register: u8,
+    pub ie_register: u8,
 
     serial_transfer_data: u8,
     serial_control: u8,
@@ -71,7 +71,8 @@ impl Interconnect {
             0xff00 => self.gamepad.read_reg(),
 
             // TODO - implement serial port (Link cable)
-            0xff01 | 0xff02 => 0,
+            0xff01 => 0x00,
+            0xff02 => 0x7e,
 
             0xff04...0xff07 => self.timer.read_reg(addr),
             0xff0f => self.if_register,
@@ -154,12 +155,9 @@ impl Interconnect {
         let timer_int = self.timer.step(cycles, device);
         let gamepad_int = self.gamepad.step(cycles, device);
 
-        let gpu_int_flag = gpu_int & self.ie_register;
-        self.if_register |= gpu_int_flag;
-        let timer_flag = timer_int & self.ie_register;
-        self.if_register |= timer_flag;
-        let gamepad_flag = gamepad_int & self.ie_register;
-        self.if_register |= gamepad_flag;
+        self.if_register |= gpu_int;
+        self.if_register |= timer_int;
+        self.if_register |= gamepad_int;
 
         let trigger_watchpoint = self.trigger_watchpoint;
         self.trigger_watchpoint = false;
@@ -172,5 +170,9 @@ impl Interconnect {
 
     pub fn get_height(&self) -> usize {
         self.gpu.get_height()
+    }
+
+    pub fn get_timer(&self) -> &Timer {
+        &self.timer
     }
 }

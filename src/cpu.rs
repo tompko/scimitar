@@ -55,6 +55,8 @@ pub struct Cpu {
     pub interrupts_enabled: bool,
 
     pub halted: i8,
+
+    pub total_cycles: u32,
 }
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -123,6 +125,8 @@ impl Cpu {
             interrupts_enabled: true,
 
             halted: 0,
+
+            total_cycles: 0,
         }
     }
 
@@ -283,6 +287,7 @@ impl Cpu {
 
                 if !self.f.z {
                     self.pc = self.pc.wrapping_add(n);
+                    cycle_count += 4;
                 }
             }
             0x21 => {
@@ -350,6 +355,7 @@ impl Cpu {
 
                 if self.f.z {
                     self.pc = self.pc.wrapping_add(n);
+                    cycle_count += 4;
                 }
             }
             0x29 => {
@@ -393,6 +399,7 @@ impl Cpu {
 
                 if !self.f.c {
                     self.pc = self.pc.wrapping_add(n);
+                    cycle_count += 4;
                 }
             }
             0x31 => {
@@ -442,6 +449,7 @@ impl Cpu {
 
                 if self.f.c {
                     self.pc = self.pc.wrapping_add(n);
+                    cycle_count += 4;
                 }
             }
             0x39 => {
@@ -866,6 +874,7 @@ impl Cpu {
                 // RET NZ - return if NZ
                 if !self.f.z {
                     self.ret(interconnect);
+                    cycle_count += 12;
                 }
             }
             0xc1 => {
@@ -883,6 +892,7 @@ impl Cpu {
 
                 if !self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    cycle_count += 4;
                 }
             }
             0xc3 => {
@@ -898,6 +908,7 @@ impl Cpu {
 
                 if !self.f.z {
                     self.call(interconnect, addr);
+                    cycle_count += 12;
                 }
             }
             0xc5 => {
@@ -916,6 +927,7 @@ impl Cpu {
                 // RET Z - return if Z flag is set
                 if self.f.z {
                     self.ret(interconnect);
+                    cycle_count += 12;
                 }
             }
             0xc9 => {
@@ -929,6 +941,7 @@ impl Cpu {
 
                 if self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    cycle_count += 4;
                 }
             }
             0xcb => {
@@ -2178,6 +2191,7 @@ impl Cpu {
 
                 if self.f.z {
                     self.call(interconnect, addr);
+                    cycle_count += 12;
                 }
             }
             0xcd => {
@@ -2201,6 +2215,7 @@ impl Cpu {
                 // RET NC
                 if !self.f.c {
                     self.ret(interconnect);
+                    cycle_count += 12;
                 }
             }
             0xd1 => {
@@ -2218,6 +2233,7 @@ impl Cpu {
 
                 if !self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    cycle_count += 4;
                 }
             }
             0xd4 => {
@@ -2226,6 +2242,7 @@ impl Cpu {
 
                 if !self.f.c {
                     self.call(interconnect, addr);
+                    cycle_count += 12;
                 }
             }
             0xd5 => {
@@ -2246,6 +2263,7 @@ impl Cpu {
                 // RET C - return if the C flag is set
                 if self.f.c {
                     self.ret(interconnect);
+                    cycle_count += 12;
                 }
             }
             0xd9 => {
@@ -2260,6 +2278,7 @@ impl Cpu {
 
                 if self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    cycle_count += 4;
                 }
             }
             0xdc => {
@@ -2268,6 +2287,7 @@ impl Cpu {
 
                 if self.f.c {
                     self.call(interconnect, addr);
+                    cycle_count += 12;
                 }
             }
             0xde => {
@@ -2424,6 +2444,7 @@ impl Cpu {
             }
         }
 
+        self.total_cycles += cycle_count as u32;
         cycle_count
     }
 

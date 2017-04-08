@@ -182,6 +182,16 @@ impl VM {
                     println!("HL: {:04x}", self.cpu.hl());
                     println!("SP: {:04x}", self.cpu.sp);
                 }
+                Ok(Command::ShowIORegs) => {
+                    println!("Total Cycles: {}", self.cpu.total_cycles);
+                    // TODO - more complete list
+                    let timer = &self.inter.get_timer();
+                    println!("Timer:");
+                    println!("DIV: {:04x}, TIMA: {:02x}, TMA: {:02x}, TAC: {:02x}",
+                             timer.divider, timer.timer_counter, timer.timer_modulo, timer.timer_control());
+                    println!("Interrupts:");
+                    println!("IE: {:02x}, IF: {:02x}", self.inter.ie_register, self.inter.if_register);
+                }
                 Ok(Command::Step(count)) => {
                     for _ in 0..count {
                         self.step(device);

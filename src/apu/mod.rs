@@ -83,7 +83,7 @@ impl Apu {
             0xff25 => self.output_terminal,
             0xff26 => self.sound_active,
             0xff30...0xff3f => self.chan3_data[(addr - 0xff30) as usize],
-            _ => panic!("Read from non-apu register in apu {:04x}", addr),
+            _ => 0xff,
         }
     }
 
@@ -111,11 +111,7 @@ impl Apu {
             0xff25 => self.output_terminal = val,
             0xff26 => self.sound_active = val,
             0xff30...0xff3f => self.chan3_data[(addr - 0xff30) as usize] = val,
-            _ => {
-                panic!("Write to non-apu register in apu {:04x} = {:02x}",
-                       addr,
-                       val)
-            }
+            _ => {},
         }
     }
 }
