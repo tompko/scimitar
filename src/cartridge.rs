@@ -4,6 +4,7 @@ use std::fs::File;
 use std::path::Path;
 
 const ROM_TYPE_OFFSET: usize = 0x0147;
+const RAM_SIZE_OFFSET: usize = 0x0149;
 
 enum Mbc {
     NONE,
@@ -61,6 +62,7 @@ impl Cartridge {
         println!("Cart type: {}", cart.type_name());
         println!("MBC: {}", cart.mbc);
         println!("Rom Size: {}", cart.rom_size());
+        println!("Ram Size: {} KByte", cart.ram.len() / 1024);
 
         Ok(cart)
     }
@@ -81,10 +83,19 @@ impl Cartridge {
 
         let rom_type = bytes[ROM_TYPE_OFFSET];
         let mbc: Mbc = rom_type.into();
+        let ram_size = match bytes[RAM_SIZE_OFFSET] {
+            0x00 => 0,
+            0x01 => 2 * 1024,
+            0x02 => 8 * 1024,
+            0x03 => 32 * 1024,
+            0x04 => 128 * 1024,
+            0x05 => 64 * 1024,
+            _ => unreachable!(),
+        };
 
         Cartridge {
             rom: bytes_copy.into_boxed_slice(),
-            ram: vec![0; 0x10000].into_boxed_slice(),
+            ram: vec![0; ram_size].into_boxed_slice(),
             boot_rom: Box::default(),
 
             boot_rom_active: false,
@@ -109,7 +120,11 @@ impl Cartridge {
             0...0x3fff => self.rom[lower + addr],
             0x4000...0x7fff => self.rom[upper + (addr - 0x4000)],
             0xa000...0xbfff => {
-                self.ram[self.ram_bank_offset + (addr - 0xa000)]
+                if self.ram_enabled {
+                    self.ram[self.ram_bank_offset + (addr - 0xa000)]
+                } else {
+                    0xff
+                }
             }
             _ => panic!("Unrecognized read address in cartridge {:04x}", addr),
         }
@@ -135,7 +150,9 @@ impl Cartridge {
                 self.update_ram_offset();
             }
             0xa000...0xbfff => {
-                self.ram[self.ram_bank_offset + (addr - 0xa000)] = val;
+                if self.ram_enabled {
+                    self.ram[self.ram_bank_offset + (addr - 0xa000)] = val;
+                }
             }
             _ => {
                 panic!("Unrecognized write address in cartridge {:04x}={:02x}",
@@ -162,7 +179,7 @@ impl Cartridge {
 
     fn update_ram_offset(&mut self) {
         self.ram_bank_offset = if self.ram_banking {
-            self.bank_upper * 0x2000
+            (self.bank_upper * 0x2000) & (self.ram.len() - 1)
         } else {
             0
         };
