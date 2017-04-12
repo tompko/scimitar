@@ -1,17 +1,45 @@
 use device::{Device, Key};
+use interrupt::{Irq, Interrupt};
+
+pub struct KeyPad {
+    key_code: Key,
+    pressed: bool,
+}
+
+impl KeyPad {
+    fn new(key_code: Key) -> Self {
+        KeyPad {
+            key_code: key_code,
+            pressed: false,
+        }
+    }
+
+    fn step(&mut self, device: &mut Device, irq: &mut Irq) {
+        let new_pressed = device.key_down(self.key_code);
+        if !self.pressed && new_pressed {
+            irq.raise_interrupt(Interrupt::Gamepad);
+        }
+
+        self.pressed = new_pressed;
+    }
+
+    fn pressed(&self) -> bool {
+        self.pressed
+    }
+}
 
 pub struct Gamepad {
     p15: bool,
     p14: bool,
 
-    up: bool,
-    down: bool,
-    left: bool,
-    right: bool,
-    a: bool,
-    b: bool,
-    start: bool,
-    select: bool,
+    up: KeyPad,
+    down: KeyPad,
+    left: KeyPad,
+    right: KeyPad,
+    a: KeyPad,
+    b: KeyPad,
+    start: KeyPad,
+    select: KeyPad,
 }
 
 impl Gamepad {
@@ -20,60 +48,57 @@ impl Gamepad {
             p15: false,
             p14: false,
 
-            up: false,
-            down: false,
-            left: false,
-            right: false,
-            a: false,
-            b: false,
-            start: false,
-            select: false,
+            // TODO - allow for configuration
+            up: KeyPad::new(Key::Up),
+            down: KeyPad::new(Key::Down),
+            left: KeyPad::new(Key::Left),
+            right: KeyPad::new(Key::Right),
+            a: KeyPad::new(Key::Z),
+            b: KeyPad::new(Key::X),
+            start: KeyPad::new(Key::Enter),
+            select: KeyPad::new(Key::Backspace),
         }
     }
 
-    pub fn step(&mut self, _: u16, device: &mut Device) -> u8 {
-        // TODO - allow for configuration
-        self.up = device.key_down(Key::Up);
-        self.down = device.key_down(Key::Down);
-        self.left = device.key_down(Key::Left);
-        self.right = device.key_down(Key::Right);
-        self.a = device.key_down(Key::Z);
-        self.b = device.key_down(Key::X);
-        self.start = device.key_down(Key::Enter);
-        self.select = device.key_down(Key::Backspace);
-
-        // TODO - raise gamepad interrupt
-        0
+    pub fn step(&mut self, _: u16, device: &mut Device, irq: &mut Irq) {
+        self.up.step(device, irq);
+        self.down.step(device, irq);
+        self.left.step(device, irq);
+        self.right.step(device, irq);
+        self.a.step(device, irq);
+        self.b.step(device, irq);
+        self.start.step(device, irq);
+        self.select.step(device, irq);
     }
 
     pub fn read_reg(&self) -> u8 {
         let mut ret = 0xc0;
 
         if !self.p15 {
-            if !self.a {
+            if !self.a.pressed() {
                 ret |= 1;
             }
-            if !self.b {
+            if !self.b.pressed() {
                 ret |= 1 << 1;
             }
-            if !self.select {
+            if !self.select.pressed() {
                 ret |= 1 << 2;
             }
-            if !self.start {
+            if !self.start.pressed() {
                 ret |= 1 << 3;
             }
         }
         if !self.p14 {
-            if !self.right {
+            if !self.right.pressed() {
                 ret |= 1;
             }
-            if !self.left {
+            if !self.left.pressed() {
                 ret |= 1 << 1;
             }
-            if !self.up {
+            if !self.up.pressed() {
                 ret |= 1 << 2;
             }
-            if !self.down {
+            if !self.down.pressed() {
                 ret |= 1 << 3;
             }
         }

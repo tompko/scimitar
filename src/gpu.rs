@@ -1,5 +1,6 @@
 use mem_map::*;
 use device::Device;
+use interrupt::{Irq, Interrupt};
 
 #[allow(dead_code)] // TODO - remove when the rendering is written
 const COLOUR_MAP: [u32; 4] = [0xff7e8429, 0xff527a4b, 0xff315d4b, 0xff29473e];
@@ -17,7 +18,6 @@ pub struct Gpu {
     scx: u8, // 0xff43 - SCX scroll background X position
     ly: u8, // 0xff44 - LY scanline being sent to LCD driver, reset on write
     lyc: u8, // 0xff45 - LYC if equal to LY STAT.coincident is set
-    dma_transfer: u8, // 0xff46 - when set initiates DMA transfer (~160 microseconds)
     bg_palette_data: PaletteDataReg, // 0xff47 - BG & Window palette data
     obj0_palette_data: PaletteDataReg, // 0xff48 OBJ0 palette data
     obj1_palette_data: PaletteDataReg, // 0xff49 OBJ1 palette data
@@ -45,7 +45,6 @@ impl Gpu {
             bg_palette_data: PaletteDataReg::default(),
             obj0_palette_data: PaletteDataReg::default(),
             obj1_palette_data: PaletteDataReg::default(),
-            dma_transfer: 0,
 
             cycles: 0,
         }
@@ -75,7 +74,6 @@ impl Gpu {
             0xff43 => self.scx,
             0xff44 => self.ly,
             0xff45 => self.lyc,
-            0xff46 => self.dma_transfer,
             0xff47 => self.bg_palette_data.into(),
             0xff48 => self.obj0_palette_data.into(),
             0xff49 => self.obj1_palette_data.into(),
@@ -93,31 +91,21 @@ impl Gpu {
             0xff43 => self.scx = val,
             0xff44 => self.ly = val,
             0xff45 => self.lyc = val,
-            0xff46 => self.dma_transfer = val,
             0xff47 => self.bg_palette_data = val.into(),
             0xff48 => self.obj0_palette_data = val.into(),
             0xff49 => self.obj1_palette_data = val.into(),
             0xff4a => self.wy = val,
             0xff4b => self.wx = val,
-            _ => {
-                panic!("Write to non-gpu register in gpu {:04x} = {:02x}",
-                       addr,
-                       val)
-            }
+            _ => {}
         }
     }
 
-    pub fn step(&mut self, cycles: u16, device: &mut Device) -> u8 {
-        if !self.lcd_control.lcd_control_op {
-            return 0;
+    pub fn step(&mut self, cycles: u16, device: &mut Device, irq: &mut Irq) {
+        if self.lcd_control.lcd_control_op {
+            for _ in 0..cycles {
+                self.inner_step(device, irq);
+            }
         }
-
-        let mut ret = 0;
-        for _ in 0..cycles {
-            ret |= self.inner_step(device);
-        }
-
-        ret
     }
 
     pub fn get_width(&self) -> usize {
@@ -128,49 +116,62 @@ impl Gpu {
         HEIGHT
     }
 
-    fn inner_step(&mut self, device: &mut Device) -> u8 {
-        let mut ret = 0;
+    fn inner_step(&mut self, device: &mut Device, irq: &mut Irq) {
         self.cycles += 1;
 
-        if self.lcdc_status.mode == 0 && self.cycles == 4 {
-            if self.ly < 144 {
-                self.lcdc_status.mode = 2;
-            } else {
-                self.lcdc_status.mode = 1;
-
-                ret |= 0x01;
-
-                device.set_frame_buffer(&self.frame_buffer);
-            }
-        } else if self.lcdc_status.mode == 0 && self.cycles == 456 {
-            self.ly += 1;
-            self.cycles = 0;
-        } else if self.lcdc_status.mode == 1 {
-            if self.cycles == 456 {
-                self.cycles = 0;
-
-                if self.ly == 0 {
-                    self.lcdc_status.mode = 0;
-                } else {
-                    self.ly += 1;
-                }
-            } else if self.ly == 153 && self.cycles == 5 {
-                self.ly = 0;
-            }
-        } else if self.lcdc_status.mode == 2 && self.cycles == 85 {
+        if self.lcdc_status.mode == 2 && self.cycles == 85 {
+            // End of OAM search
             self.lcdc_status.mode = 3;
-
+        } else if self.lcdc_status.mode == 3 && self.cycles == 256 {
+            // This interrupt occurs on the cycle before we switch to hblank (mode 0)
+            if self.lcdc_status.hblank_interrupt_enable {
+                irq.raise_interrupt(Interrupt::Stat);
+            }
+        } else if self.lcdc_status.mode == 3 && self.cycles == 260 {
+            // TODO - this mode should have variable length
             self.render_background();
 
             if self.lcd_control.sprite_display {
                 self.render_sprites();
             }
-        } else if self.lcdc_status.mode == 3 && self.cycles == 260 {
-            // TODO - this mode should have variable length
-            self.lcdc_status.mode = 0
-        }
 
-        ret
+            self.lcdc_status.mode = 0
+        } else if self.lcdc_status.mode == 0 && self.cycles == 456 {
+            self.ly += 1;
+            self.cycles = 0;
+
+            self.lcdc_status.coincidence_flag = self.ly == self.lyc;
+            if self.lcdc_status.coincidence_interrupt_enable && self.ly == self.lyc {
+                irq.raise_interrupt(Interrupt::Stat);
+            }
+
+            if self.ly < 144 {
+                self.lcdc_status.mode = 2;
+            } else {
+                self.lcdc_status.mode = 1;
+
+                irq.raise_interrupt(Interrupt::VBlank);
+                if self.lcdc_status.vblank_interrupt_enable {
+                    irq.raise_interrupt(Interrupt::Stat);
+                }
+
+                device.set_frame_buffer(&self.frame_buffer);
+            }
+        } else if self.lcdc_status.mode == 1 {
+            if self.cycles == 456 {
+                self.cycles = 0;
+
+                if self.ly == 153 {
+                    self.lcdc_status.mode = 2;
+                    if self.lcdc_status.oam_interrupt_enable {
+                        irq.raise_interrupt(Interrupt::Stat);
+                    }
+                    self.ly = 0;
+                } else {
+                    self.ly += 1;
+                }
+            }
+        }
     }
 
     fn render_background(&mut self) {
@@ -322,7 +323,7 @@ impl Into<u8> for LcdControlReg {
 }
 
 
-#[derive(Default, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct LcdcStatusReg {
     coincidence_interrupt_enable: bool,
     oam_interrupt_enable: bool,
@@ -330,6 +331,19 @@ pub struct LcdcStatusReg {
     hblank_interrupt_enable: bool,
     coincidence_flag: bool,
     mode: u8,
+}
+
+impl Default for LcdcStatusReg {
+    fn default() -> Self {
+        LcdcStatusReg {
+            coincidence_interrupt_enable: false,
+            oam_interrupt_enable: false,
+            vblank_interrupt_enable: false,
+            hblank_interrupt_enable: false,
+            coincidence_flag: false,
+            mode: 2, // Start in OAM access mode
+        }
+    }
 }
 
 impl From<u8> for LcdcStatusReg {

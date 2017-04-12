@@ -1,4 +1,5 @@
 use device::Device;
+use interrupt::{Irq, Interrupt};
 
 pub struct Timer {
     pub divider: u16,
@@ -35,7 +36,7 @@ impl Timer {
             0xff05 => self.timer_counter,
             0xff06 => self.timer_modulo,
             0xff07 => self.timer_control(),
-            _ => panic!("Read from non-timer register in timer {:04x}", addr),
+            _ => 0xff,
         }
     }
 
@@ -48,17 +49,12 @@ impl Timer {
             }
             0xff06 => self.timer_modulo = val,
             0xff07 => self.set_timer_control(val),
-            _ => {
-                panic!("Write to non-timer register in timer {:04x} = {:02x}",
-                       addr,
-                       val)
-            }
+            _ => {}
         };
         self.divider_change();
     }
 
-    pub fn step(&mut self, cycles: u16, _: &mut Device) -> u8 {
-        let mut ret = 0;
+    pub fn step(&mut self, cycles: u16, _: &mut Device, irq: &mut Irq) {
         for _ in 0..cycles {
             if self.tac_reload_delay > 0 {
                 self.tac_reload_delay -= 1;
@@ -70,11 +66,9 @@ impl Timer {
 
             let interrupt = self.divider_change();
             if interrupt {
-                ret |= 0x01 << 2;
+                irq.raise_interrupt(Interrupt::Timer);
             }
         }
-
-        ret
     }
 
     pub fn timer_control(&self) -> u8 {

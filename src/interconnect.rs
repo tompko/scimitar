@@ -7,6 +7,7 @@ use device::Device;
 use apu::Apu;
 use timer::Timer;
 use gamepad::Gamepad;
+use interrupt::Irq;
 
 pub struct Interconnect {
     cartridge: Cartridge,
@@ -151,13 +152,13 @@ impl Interconnect {
             }
         }
 
-        let gpu_int = self.gpu.step(cycles, device);
-        let timer_int = self.timer.step(cycles, device);
-        let gamepad_int = self.gamepad.step(cycles, device);
+        let mut irq = Irq::default();
 
-        self.if_register |= gpu_int;
-        self.if_register |= timer_int;
-        self.if_register |= gamepad_int;
+        self.gpu.step(cycles, device, &mut irq);
+        self.timer.step(cycles, device, &mut irq);
+        self.gamepad.step(cycles, device, &mut irq);
+
+        self.if_register |= irq.get_if();
 
         let trigger_watchpoint = self.trigger_watchpoint;
         self.trigger_watchpoint = false;

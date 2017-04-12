@@ -16,3 +16,4 @@ mod timer;
 mod opcodes;
 mod command;
 mod gamepad;
+mod interrupt;
