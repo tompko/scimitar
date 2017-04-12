@@ -204,8 +204,13 @@ impl Gpu {
             let tile_index = self.oam[(i * 4) + 2] as usize;
             let tile_offset = tile_index * (sprite_height as usize) * 2;
 
+            let sprite_flags = self.oam[(i * 4) + 3];
+
+            let flip_horz = (sprite_flags & (1 << 5)) != 0;
+
             for i in 0..8 {
-                let colour = self.get_sprite_pixel(tile_offset, sprite_row, i);
+                let x = if flip_horz { 7 - i } else { i };
+                let colour = self.get_sprite_pixel(tile_offset, sprite_row, x);
 
                 self.frame_buffer[(ly as usize * WIDTH) + (sprite_x + i as i16) as usize] = colour;
             }
