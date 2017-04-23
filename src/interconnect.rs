@@ -154,6 +154,7 @@ impl Interconnect {
 
         let mut irq = Irq::default();
 
+        self.apu.step(cycles, device, &mut irq);
         self.gpu.step(cycles, device, &mut irq);
         self.timer.step(cycles, device, &mut irq);
         self.gamepad.step(cycles, device, &mut irq);
