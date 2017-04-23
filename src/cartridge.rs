@@ -178,7 +178,7 @@ impl Cartridge {
     }
 
     fn update_ram_offset(&mut self) {
-        self.ram_bank_offset = if self.ram_banking {
+        self.ram_bank_offset = if self.ram_banking && self.ram.len() > 0 {
             (self.bank_upper * 0x2000) & (self.ram.len() - 1)
         } else {
             0

@@ -40,6 +40,7 @@ impl Device for TestDevice {
     }
 }
 
+#[allow(dead_code)]
 pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, hash: u32) {
     let cartridge = Cartridge::load(file_name).unwrap();
     let interconnect = Interconnect::new(cartridge);
@@ -66,4 +67,21 @@ pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, hash: u32) {
     }
 
     assert_eq!(hash, checksum_ieee(&bytes));
+}
+
+#[allow(dead_code)]
+pub fn run_test_till_ed<P: AsRef<Path>>(file_name: P) {
+    let cartridge = Cartridge::load(file_name).unwrap();
+    let interconnect = Interconnect::new(cartridge);
+
+    let mut device = TestDevice::new(interconnect.get_width(), interconnect.get_height());
+
+    let mut vm = VM::new(interconnect, false, false);
+
+
+    while vm.get_next_instruction() != 0xed {
+        vm.step(&mut device);
+    }
+
+    assert_eq!(vm.get_cpu().a, 0x00);
 }

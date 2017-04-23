@@ -163,6 +163,14 @@ impl VM {
         }
     }
 
+    pub fn get_next_instruction(&self) -> u8 {
+        self.inter.read_byte(self.cpu.pc)
+    }
+
+    pub fn get_cpu(&self) -> &Cpu {
+        &self.cpu
+    }
+
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     fn run_debug_commands(&mut self, device: &mut Device) -> bool {
         while let Ok(command_string) = self.stdin_receiver.try_recv() {

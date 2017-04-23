@@ -14,6 +14,25 @@ A gameboy emulator in Rust.
 | mem_timing_2 | :x:   |
 | oam_bug_2    | :x:   |
 
+## Mooneye
+Tested using master at f72ba415e1.
+
+### Emulator Only
+
+#### MBC1
+
+| Test              | Result |
+| ----------------- | -------|
+| rom 512Kb         | :+1:   |
+| rom 1Mb           | :+1:   |
+| rom 2Mb           | :+1:   |
+| rom 4Mb           | :+1:   |
+| rom 8Mb           | :+1:   |
+| rom 16Mb          | :+1:   |
+| ram 64Kb          | :+1:   |
+| ram 256Kb         | :+1:   |
+| multicart rom 8Mb | :x:    |
+
 ## License
 
 Licensed under either of
