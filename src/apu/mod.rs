@@ -12,7 +12,7 @@ pub struct Apu {
 
     out_chan_control: u8,
     output_terminal: u8,
-    sound_active: u8,
+    sound_active: bool,
 }
 
 impl Apu {
@@ -25,7 +25,7 @@ impl Apu {
 
             out_chan_control: 0,
             output_terminal: 0,
-            sound_active: 0,
+            sound_active: true,
         }
     }
 
@@ -55,13 +55,18 @@ impl Apu {
 
             0xff24 => self.out_chan_control,
             0xff25 => self.output_terminal,
-            0xff26 => self.sound_active,
+            0xff26 => if self.sound_active { 0xf0 } else { 0x70 },
             0xff30...0xff3f => self.chan3.wave.data[(addr - 0xff30) as usize],
+
             _ => 0xff,
         }
     }
 
     pub fn write_reg(&mut self, addr: u16, val: u8) {
+        if !self.sound_active && addr != 0xff26 {
+            return
+        }
+
         match addr {
             0xff10 => self.chan1.sweep.write(val),
             0xff11 => {
@@ -108,8 +113,20 @@ impl Apu {
 
             0xff24 => self.out_chan_control = val,
             0xff25 => self.output_terminal = val,
-            0xff26 => self.sound_active = val,
+            0xff26 => {
+                self.sound_active = ((val >> 7) & 0x01) != 0;
+                if !self.sound_active {
+                    self.chan1.deactivate();
+                    self.chan2.deactivate();
+                    self.chan3.deactivate();
+                    self.chan4.deactivate();
+
+                    self.out_chan_control = 0;
+                    self.output_terminal = 0;
+                }
+            }
             0xff30...0xff3f => self.chan3.wave.data[(addr - 0xff30) as usize] = val,
+
             _ => {},
         }
     }

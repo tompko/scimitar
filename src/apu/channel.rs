@@ -59,6 +59,16 @@ impl Channel1 {
     pub fn write_length_active(&mut self, val: u8) {
         self.length_active = ((val >> 6) & 0x01) != 0;
     }
+
+    pub fn deactivate(&mut self) {
+        self.sweep.write(0);
+        self.wave.write(0);
+        self.length.write(0);
+        self.volume.write(0);
+        self.timer.write_lo(0);
+        self.timer.write_hi(0);
+        self.length_active = false;
+    }
 }
 
 impl Default for Channel2 {
@@ -84,6 +94,15 @@ impl Channel2 {
 
     pub fn write_length_active(&mut self, val: u8) {
         self.length_active = ((val >> 6) & 0x01) != 0;
+    }
+
+    pub fn deactivate(&mut self) {
+        self.wave.write(0);
+        self.length.write(0);
+        self.volume.write(0);
+        self.timer.write_lo(0);
+        self.timer.write_hi(0);
+        self.length_active = false;
     }
 }
 
@@ -116,6 +135,15 @@ impl Channel3 {
     pub fn write_length_active(&mut self, val: u8) {
         self.length_active = ((val >> 6) & 0x01) != 0;
     }
+
+    pub fn deactivate(&mut self) {
+        self.active = false;
+        self.timer.write_lo(0);
+        self.timer.write_hi(0);
+        self.length.write(0);
+        self.volume.write(0);
+        self.length_active = false;
+    }
 }
 
 impl Default for Channel4 {
@@ -141,5 +169,14 @@ impl Channel4 {
 
     pub fn write_length_active(&mut self, val: u8) {
         self.length_active = ((val >> 6) & 0x01) != 0;
+    }
+
+    pub fn deactivate(&mut self) {
+        self.timer.write_lo(0);
+        self.timer.write_hi(0);
+        self.lsfr.write(0);
+        self.length.write(0);
+        self.volume.write(0);
+        self.length_active = false;
     }
 }
