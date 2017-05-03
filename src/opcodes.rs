@@ -265,9 +265,9 @@ const OPCODES: [OpcodeSpec; 256] = [
     OpcodeSpec { opcode_disasm: "", opcode_length: 0 }, // DD - illegal op
     OpcodeSpec { opcode_disasm: "SBC A, 0x{0}", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "RST 0x18", opcode_length: 1 },
-    OpcodeSpec { opcode_disasm: "LD (0xff00 0x{0}), A", opcode_length: 2 },
+    OpcodeSpec { opcode_disasm: "LD (0xff00 + 0x{0}), A", opcode_length: 2 },
     OpcodeSpec { opcode_disasm: "POP HL", opcode_length: 1 },
-    OpcodeSpec { opcode_disasm: "LD (0xFF00 + 0x{0}), A", opcode_length: 2 },
+    OpcodeSpec { opcode_disasm: "LD (0xff00 + C), A", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "", opcode_length: 0 }, // E3 - illegal op
     OpcodeSpec { opcode_disasm: "", opcode_length: 0 }, // E4 - illegal op
     OpcodeSpec { opcode_disasm: "PUSH HL", opcode_length: 1 },

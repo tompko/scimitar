@@ -222,7 +222,7 @@ impl VM {
                     const NUM_ROWS: usize = 16;
                     const NUM_COLS: usize = 16;
                     for _ in 0..NUM_ROWS {
-                        print!("0x{:08x}  ", self.cursor);
+                        print!("0x{:04x}  ", self.cursor);
                         for x in 0..NUM_COLS {
                             let byte = self.inter.read_byte(self.cursor);
                             self.cursor = self.cursor.wrapping_add(1);
@@ -243,7 +243,7 @@ impl VM {
                 }
                 Ok(Command::Breakpoint) => {
                     for addr in &self.breakpoints {
-                        println!("* 0x{:08x}", addr);
+                        println!("* 0x{:04x}", addr);
                     }
                 }
                 Ok(Command::AddBreakpoint(addr)) => {
@@ -251,12 +251,12 @@ impl VM {
                 }
                 Ok(Command::RemoveBreakpoint(addr)) => {
                     if !self.breakpoints.remove(&addr) {
-                        println!("Breakpoint at 0x{:08x} does not exist", addr);
+                        println!("Breakpoint at 0x{:04x} does not exist", addr);
                     }
                 }
                 Ok(Command::Watchpoint) => {
                     for addr in &self.inter.watchpoints {
-                        println!("* 0x{:08x}", addr);
+                        println!("* 0x{:04x}", addr);
                     }
                 }
                 Ok(Command::AddWatchpoint(addr)) => {
@@ -264,7 +264,7 @@ impl VM {
                 }
                 Ok(Command::RemoveWatchpoint(addr)) => {
                     if !self.inter.watchpoints.remove(&addr) {
-                        println!("Watchpoint at 0x{:08x} does not exist", addr);
+                        println!("Watchpoint at 0x{:04x} does not exist", addr);
                     }
                 }
                 Ok(Command::Exit) => {
@@ -298,7 +298,7 @@ impl VM {
             print!("  ");
         }
 
-        print!("0x{:08x}  ", self.cursor);
+        print!("0x{:04x}  ", self.cursor);
         let opcode = decode_instr(&self.inter, self.cursor);
 
         println!("{}", opcode);
