@@ -1,4 +1,5 @@
 use apu::unit::*;
+use apu::frame_sequencer::FrameSequencer;
 
 pub struct Channel1 {
     pub sweep: Sweep,
@@ -39,7 +40,7 @@ impl Default for Channel1 {
         Channel1 {
             sweep: Sweep::default(),
             wave: SquareWave::default(),
-            length: LengthCounter::new(0x3f),
+            length: LengthCounter::new(6),
             volume: VolumeEnvelope::default(),
             timer: Timer::default(),
             length_active: false,
@@ -57,7 +58,7 @@ impl Channel1 {
     }
 
     pub fn write_length_active(&mut self, val: u8) {
-        self.length_active = ((val >> 6) & 0x01) != 0;
+        self.length.clocked = ((val >> 6) & 0x01) != 0;
     }
 
     pub fn deactivate(&mut self) {
@@ -69,13 +70,23 @@ impl Channel1 {
         self.timer.write_hi(0);
         self.length_active = false;
     }
+
+    pub fn step(&mut self, frame_sequencer: &FrameSequencer) {
+        if frame_sequencer.length_step() {
+            self.length.step();
+        }
+    }
+
+    pub fn active(&self) -> bool {
+        self.length.active()
+    }
 }
 
 impl Default for Channel2 {
     fn default() -> Self {
         Channel2 {
             wave: SquareWave::default(),
-            length: LengthCounter::new(0x3f),
+            length: LengthCounter::new(6),
             volume: VolumeEnvelope::default(),
             timer: Timer::default(),
             length_active: false,
@@ -104,6 +115,9 @@ impl Channel2 {
         self.timer.write_hi(0);
         self.length_active = false;
     }
+
+    pub fn step(&mut self, frame_sequencer: &FrameSequencer) {
+    }
 }
 
 impl Default for Channel3 {
@@ -112,7 +126,7 @@ impl Default for Channel3 {
             active: false,
             timer: Timer::default(),
             wave: Wave::default(),
-            length: LengthCounter::new(0xff),
+            length: LengthCounter::new(8),
             volume: WaveVolume::default(),
             length_active: false,
         }
@@ -144,6 +158,9 @@ impl Channel3 {
         self.volume.write(0);
         self.length_active = false;
     }
+
+    pub fn step(&mut self, frame_sequencer: &FrameSequencer) {
+    }
 }
 
 impl Default for Channel4 {
@@ -151,7 +168,7 @@ impl Default for Channel4 {
         Channel4 {
             timer: Timer::default(),
             lsfr: LSFR::default(),
-            length: LengthCounter::new(0x3f),
+            length: LengthCounter::new(6),
             volume: VolumeEnvelope::default(),
             length_active: false,
         }
@@ -178,5 +195,8 @@ impl Channel4 {
         self.length.write(0);
         self.volume.write(0);
         self.length_active = false;
+    }
+
+    pub fn step(&mut self, frame_sequencer: &FrameSequencer) {
     }
 }

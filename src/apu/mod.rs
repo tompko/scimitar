@@ -3,6 +3,9 @@ use super::device::Device;
 
 mod channel;
 mod unit;
+mod frame_sequencer;
+
+const AUDIO_STEP_CYCLE_COUNT: u16 = 8 * 1024; // Divides the main 4MHz to get 512Hz
 
 pub struct Apu {
     chan1: channel::Channel1,
@@ -13,6 +16,9 @@ pub struct Apu {
     out_chan_control: u8,
     output_terminal: u8,
     sound_active: bool,
+
+    cycles: u16,
+    frame_sequencer: frame_sequencer::FrameSequencer,
 }
 
 impl Apu {
@@ -25,7 +31,10 @@ impl Apu {
 
             out_chan_control: 0,
             output_terminal: 0,
-            sound_active: true,
+            sound_active: false,
+
+            cycles: 0,
+            frame_sequencer: frame_sequencer::FrameSequencer::default(),
         }
     }
 
@@ -35,27 +44,32 @@ impl Apu {
             0xff11 => self.chan1.wave.read() | 0x3f,
             0xff12 => self.chan1.volume.read(),
             0xff13 => 0xff,
-            0xff14 => if self.chan1.length_active { 0xff } else { 0xbf },
+            0xff14 => if self.chan1.length.clocked { 0xff } else { 0xbf },
 
             0xff16 => self.chan2.wave.read() | 0x3f,
             0xff17 => self.chan2.volume.read(),
             0xff18 => 0xff,
-            0xff19 => if self.chan2.length_active { 0xff } else { 0xbf },
+            0xff19 => if self.chan2.length.clocked { 0xff } else { 0xbf },
 
             0xff1a => if self.chan3.active { 0xff } else { 0x7f },
             0xff1b => 0xff,
             0xff1c => self.chan3.volume.read(),
             0xff1d => 0xff,
-            0xff1e => if self.chan3.length_active { 0xff } else { 0xbf },
+            0xff1e => if self.chan3.length.clocked { 0xff } else { 0xbf },
 
             0xff20 => 0xff,
             0xff21 => self.chan4.volume.read(),
             0xff22 => self.chan4.lsfr.read(),
-            0xff23 => if self.chan4.length_active { 0xff } else { 0xbf },
+            0xff23 => if self.chan4.length.clocked { 0xff } else { 0xbf },
 
             0xff24 => self.out_chan_control,
             0xff25 => self.output_terminal,
-            0xff26 => if self.sound_active { 0xf0 } else { 0x70 },
+            0xff26 => {
+                let high = if self.sound_active { 0xf0 } else { 0x70 };
+                let chan1 = if self.chan1.active() { 0x01 } else { 0x00 };
+
+                high | chan1
+            },
             0xff30...0xff3f => self.chan3.wave.data[(addr - 0xff30) as usize],
 
             _ => 0xff,
@@ -131,7 +145,21 @@ impl Apu {
         }
     }
 
-    // pub fn step(&mut self, cycles: u16, device: &mut Device, irq: &mut Irq) {
-    pub fn step(&mut self, _: u16, _: &mut Device, _: &mut Irq) {
+    pub fn step(&mut self, cycles: u16, device: &mut Device, _: &mut Irq) {
+        self.cycles += cycles;
+
+        while self.cycles > AUDIO_STEP_CYCLE_COUNT {
+            self.inner_step(device);
+            self.cycles -= AUDIO_STEP_CYCLE_COUNT;
+        }
+    }
+
+    fn inner_step(&mut self, device: &mut Device) {
+        self.frame_sequencer.step();
+
+        self.chan1.step(&self.frame_sequencer);
+        self.chan2.step(&self.frame_sequencer);
+        self.chan3.step(&self.frame_sequencer);
+        self.chan4.step(&self.frame_sequencer);
     }
 }

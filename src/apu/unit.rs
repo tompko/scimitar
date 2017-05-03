@@ -33,24 +33,44 @@ impl SquareWave {
 }
 
 pub struct LengthCounter {
-    length: u8,
-    mask: u8,
+    pub clocked: bool,
+
+    pub length: u8,
+    bit_length: u8,
+    last: u8,
+    active: bool,
 }
 
 impl LengthCounter {
-    pub fn new(mask: u8) -> Self {
+    pub fn new(bit_length: u8) -> Self {
         LengthCounter {
             length: 0,
-            mask: mask
+            bit_length: bit_length,
+            last: 0,
+            active: false,
+            clocked: false,
         }
     }
 
-    // pub fn read(&self) -> u8 {
-    //     self.length
-    // }
-
     pub fn write(&mut self, val: u8) {
-        self.length = val & self.mask;
+        self.length = val;
+        self.active = true;
+        self.last = (val >> self.bit_length) & 0x01;
+    }
+
+    pub fn step(&mut self) {
+        if self.clocked && self.active {
+            self.length = self.length.wrapping_add(1);
+            let next = (self.length >> self.bit_length) & 0x01;
+            if self.last == 1 && next == 0 {
+                self.active = false;
+            }
+            self.last = next;
+        }
+    }
+
+    pub fn active(&self) -> bool {
+        self.active
     }
 }
 
