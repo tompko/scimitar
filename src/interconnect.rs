@@ -59,6 +59,7 @@ impl Interconnect {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn read_byte(&self, addr: u16) -> u8 {
         match addr {
             ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
@@ -87,6 +88,7 @@ impl Interconnect {
         }
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn write_byte(&mut self, addr: u16, val: u8) {
         if self.watchpoints.contains(&addr) {
             self.trigger_watchpoint = true;

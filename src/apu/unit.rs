@@ -38,7 +38,6 @@ pub struct LengthCounter {
     pub length: u8,
     bit_length: u8,
     last: u8,
-    active: bool,
 }
 
 impl LengthCounter {
@@ -47,30 +46,30 @@ impl LengthCounter {
             length: 0,
             bit_length: bit_length,
             last: 0,
-            active: false,
             clocked: false,
         }
     }
 
     pub fn write(&mut self, val: u8) {
         self.length = val;
-        self.active = true;
-        self.last = (val >> self.bit_length) & 0x01;
+        self.last = (val >> (self.bit_length - 1)) & 0x01;
+
+        self.clocked = true;
     }
 
-    pub fn step(&mut self) {
-        if self.clocked && self.active {
+    pub fn step(&mut self) -> bool {
+        if self.clocked {
             self.length = self.length.wrapping_add(1);
-            let next = (self.length >> self.bit_length) & 0x01;
+            let next = (self.length >> (self.bit_length - 1)) & 0x01;
             if self.last == 1 && next == 0 {
-                self.active = false;
+                self.clocked = false;
+                self.last = next;
+                return true;
             }
             self.last = next;
         }
-    }
 
-    pub fn active(&self) -> bool {
-        self.active
+        false
     }
 }
 
