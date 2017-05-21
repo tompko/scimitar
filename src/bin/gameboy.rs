@@ -9,6 +9,7 @@ use gameboy::vm::VM;
 use gameboy::cartridge::Cartridge;
 use gameboy::interconnect::Interconnect;
 use gameboy::device::{self, Device};
+use gameboy::symbols::Symbols;
 
 struct ConsoleDevice {
     buffer: Box<[u32]>,
@@ -85,6 +86,11 @@ fn main() {
                  .short("b")
                  .long("boot-rom")
                  .takes_value(true))
+        .arg(Arg::with_name("sym-file")
+                 .help("Sets the symbol file to use")
+                 .short("s")
+                 .long("sym")
+                 .takes_value(true))
         .arg(Arg::with_name("debug")
                  .help("If present, starts in debugging mode")
                  .short("d")
@@ -101,11 +107,18 @@ fn main() {
         with_boot_rom = true;
         cartridge.load_boot_rom(boot_file).unwrap();
     }
+
+    let symbols = if let Some(sym_file) = matches.value_of("sym-file") {
+        Symbols::load(sym_file).unwrap()
+    } else {
+        Symbols::default()
+    };
+
     let interconnect = Interconnect::new(cartridge);
     let width = interconnect.get_width();
     let height = interconnect.get_height();
 
-    let mut vm = VM::new(interconnect, with_boot_rom, start_in_debug);
+    let mut vm = VM::new(interconnect, with_boot_rom, start_in_debug, symbols);
 
     let window_options = WindowOptions {
         borderless: false,

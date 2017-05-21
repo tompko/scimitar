@@ -7,6 +7,7 @@ pub mod cartridge;
 pub mod cpu;
 pub mod interconnect;
 pub mod device;
+pub mod symbols;
 
 mod mem_map;
 mod memory;

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Write;
 use interconnect::Interconnect;
+use symbols::Symbols;
 use strfmt::{self, strfmt_map};
 
 #[derive(Clone, Copy)]
@@ -9,7 +10,7 @@ struct OpcodeSpec {
     opcode_length: u16,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Opcode {
     opcode_disasm: &'static str,
     pub opcode_length: u16,
@@ -17,6 +18,8 @@ pub struct Opcode {
     opcode_addr: u16,
     opcode_n0: u8,
     opcode_n1: u8,
+
+    symbol: String,
 }
 
 impl fmt::Display for Opcode {
@@ -29,6 +32,7 @@ impl fmt::Display for Opcode {
                 "0" => fmt.write_str(&format!("{:02X}", self.opcode_n0)).unwrap(),
                 "1" => fmt.write_str(&format!("{:02X}", self.opcode_n1)).unwrap(),
                 "2" => fmt.write_str(&format!("{:04X}", self.opcode_addr)).unwrap(),
+                "sym" => fmt.write_str(&self.symbol).unwrap(),
                 _ => unreachable!(),
             }
             Ok(())
@@ -236,7 +240,7 @@ const OPCODES: [OpcodeSpec; 256] = [
     OpcodeSpec { opcode_disasm: "RET NZ", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "POP BC", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "JP NZ, 0x{1}{0}", opcode_length: 3 },
-    OpcodeSpec { opcode_disasm: "JP 0x{1}{0}", opcode_length: 3 },
+    OpcodeSpec { opcode_disasm: "JP 0x{1}{0} ({sym})", opcode_length: 3 },
     OpcodeSpec { opcode_disasm: "CALL NZ, 0x{1}{0}", opcode_length: 3 },
     OpcodeSpec { opcode_disasm: "PUSH BC", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "ADD A, 0x{0}", opcode_length: 2 },
@@ -246,7 +250,7 @@ const OPCODES: [OpcodeSpec; 256] = [
     OpcodeSpec { opcode_disasm: "JP Z 0x{1}{0}", opcode_length: 3 },
     OpcodeSpec { opcode_disasm: "", opcode_length: 0 }, // 0xcb - extended instruction prefix
     OpcodeSpec { opcode_disasm: "CALL Z 0x{1}{0}", opcode_length: 3 },
-    OpcodeSpec { opcode_disasm: "CALL 0x{1}{0}", opcode_length: 3 },
+    OpcodeSpec { opcode_disasm: "CALL 0x{1}{0} ({sym})", opcode_length: 3 },
     OpcodeSpec { opcode_disasm: "ADC A, 0x{0}", opcode_length: 2 },
     OpcodeSpec { opcode_disasm: "RST 0x08", opcode_length: 1 },
     OpcodeSpec { opcode_disasm: "RET NC", opcode_length: 1 },
@@ -559,7 +563,7 @@ const CBOPCODES: [OpcodeSpec; 256] = [
     OpcodeSpec { opcode_disasm: "SET 7,A", opcode_length: 2 },
 ];
 
-pub fn decode_instr(interconnect: &Interconnect, addr: u16) -> Opcode {
+pub fn decode_instr(interconnect: &Interconnect, symbols: &Symbols, addr: u16) -> Opcode {
     let instr = interconnect.read_byte(addr);
     let subcode = interconnect.read_byte(addr + 1);
     let mut offset = addr;
@@ -574,6 +578,9 @@ pub fn decode_instr(interconnect: &Interconnect, addr: u16) -> Opcode {
     let n1 = interconnect.read_byte(offset + 2);
     let opcode_jr_dest = addr.wrapping_add(n0 as i8 as u16)
         .wrapping_add(opcode_spec.opcode_length as u16);
+    let opcode_target_addr = ((n1 as u16) << 8) | (n0 as u16);
+
+    let sym = symbols.get(opcode_target_addr).unwrap_or("").to_owned();
 
     if opcode_spec.opcode_disasm == "" {
         panic!("No opcode string for op {0}/{0:02x} ({1}/{1:02x})",
@@ -592,5 +599,6 @@ pub fn decode_instr(interconnect: &Interconnect, addr: u16) -> Opcode {
         opcode_addr: opcode_jr_dest,
         opcode_n0: n0,
         opcode_n1: n1,
+        symbol: sym,
     }
 }

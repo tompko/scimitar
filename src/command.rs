@@ -1,6 +1,7 @@
-use combine::{choice, eof, many1, optional, Parser, parser, try, value};
-use combine::char::{digit, hex_digit, space, spaces, string};
+use combine::{choice, eof, many, many1, optional, Parser, parser, try, value};
+use combine::char::{alpha_num, digit, hex_digit, letter, space, spaces, string};
 use combine::primitives::{ParseResult, Stream};
+use combine;
 
 use std::str::{self, FromStr};
 use std::borrow::Cow;
@@ -14,12 +15,20 @@ pub enum Command {
     Goto(u16),
     ShowMem(Option<u16>),
     Disassemble(usize),
+
     Breakpoint,
     AddBreakpoint(u16),
+    AddSymBreakpoint(String),
+    AddTempBreakpoint(u16),
+    AddTempSymBreakpoint(String),
     RemoveBreakpoint(u16),
+    RemoveTempBreakpoint(u16),
+
     Watchpoint,
     AddWatchpoint(u16),
     RemoveWatchpoint(u16),
+    AddSymbol(u16, String),
+    RemoveSymbol(u16),
     Exit,
     Repeat,
 }
@@ -73,9 +82,29 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
             .map(|(_, _, addr)| Command::AddBreakpoint(addr))
             .boxed();
 
+    let add_sym_breakpoint =
+        (choice([try(string("addbreakpoint")), try(string("ab"))]), space(), symbol_id())
+            .map(|(_, _, sym)| Command::AddSymBreakpoint(sym))
+            .boxed();
+
+    let add_temp_breakpoint =
+        (choice([try(string("addtempbreakpoint")), try(string("at"))]), space(), u16_hex())
+            .map(|(_, _, addr)| Command::AddTempBreakpoint(addr))
+            .boxed();
+
+    let add_temp_sym_breakpoint =
+        (choice([try(string("addtempbreakpoint")), try(string("at"))]), space(), symbol_id())
+            .map(|(_, _, sym)| Command::AddTempSymBreakpoint(sym))
+            .boxed();
+
     let remove_breakpoint =
         (choice([try(string("removebreakpoint")), try(string("rb"))]), space(), u16_hex())
             .map(|(_, _, addr)| Command::RemoveBreakpoint(addr))
+            .boxed();
+
+    let remove_temp_breakpoint =
+        (choice([try(string("removetempbreakpoint")), try(string("rt"))]), space(), u16_hex())
+            .map(|(_, _, addr)| Command::RemoveTempBreakpoint(addr))
             .boxed();
 
     let watchpoint =
@@ -90,6 +119,16 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
         (choice([try(string("removewatchpoint")), try(string("rw"))]), space(), u16_hex())
             .map(|(_, _, addr)| Command::RemoveWatchpoint(addr))
             .boxed();
+
+    let add_symbol =
+        (choice([try(string("addsymbol")), try(string("as"))]), space(), u16_hex(), space(), symbol_id())
+        .map(|(_, _, addr, _, sym)| Command::AddSymbol(addr, sym))
+        .boxed();
+
+    let remove_symbol =
+        (choice([try(string("removesymbol")), try(string("rs"))]), space(), u16_hex())
+        .map(|(_, _, addr)| Command::RemoveSymbol(addr))
+        .boxed();
 
     let exit = choice([try(string("exit")),
                        try(string("quit")),
@@ -110,10 +149,16 @@ fn command<I: Stream<Item = char>>(input: I) -> ParseResult<Command, I> {
                 disassemble,
                 breakpoint,
                 add_breakpoint,
+                add_sym_breakpoint,
+                add_temp_breakpoint,
+                add_temp_sym_breakpoint,
                 remove_breakpoint,
+                remove_temp_breakpoint,
                 watchpoint,
                 add_watchpoint,
                 remove_watchpoint,
+                add_symbol,
+                remove_symbol,
                 exit,
                 repeat]
                    .into_iter()
@@ -132,5 +177,11 @@ fn u16_hex<'a, I: Stream<Item = char> + 'a>() -> Box<Parser<Input = I, Output = 
     (optional(hex_prefix), many1(hex_digit()))
         .map(|x| x.1)
         .and_then(|s: String| u16::from_str_radix(&s, 16))
+        .boxed()
+}
+
+fn symbol_id<'a, I: Stream<Item = char> + 'a>() -> Box<Parser<Input = I, Output = String> + 'a> {
+    (letter().and(many(combine::char::char('_').or(alpha_num()))))
+        .map(|(a, mut b): (char, String)| {b.insert(0, a); b})
         .boxed()
 }

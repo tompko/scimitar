@@ -8,6 +8,7 @@ use device::Device;
 use time::{self, SteadyTime};
 use command::*;
 use opcodes::*;
+use symbols::Symbols;
 
 // The Game Boy runs at 4194304 Hz which is 8192 clocks every 1953125 nanoseconds
 const SYNC_PERIOD_NS: i64 = 1953125;
@@ -27,13 +28,17 @@ pub struct VM {
     start_time: SteadyTime,
 
     breakpoints: HashSet<u16>,
+    temp_breakpoints: HashSet<u16>,
+
     cursor: u16,
     last_command: Option<Command>,
     stdin_receiver: Receiver<String>,
+
+    symbols: Symbols,
 }
 
 impl VM {
-    pub fn new(interconnect: Interconnect, with_boot_rom: bool, start_in_debug: bool) -> VM {
+    pub fn new(interconnect: Interconnect, with_boot_rom: bool, start_in_debug: bool, symbols: Symbols) -> VM {
         let (stdin_sender, stdin_receiver) = channel();
 
         // Blocking stdin means it's impossible to join this thread, so we let
@@ -99,9 +104,13 @@ impl VM {
             start_time: SteadyTime::now(),
 
             breakpoints: HashSet::new(),
+            temp_breakpoints: HashSet::new(),
+
             cursor: cursor,
             last_command: None,
             stdin_receiver: stdin_receiver,
+
+            symbols: symbols,
         };
         if vm.mode == Mode::Debugging {
             vm.disassemble_instruction();
@@ -114,8 +123,9 @@ impl VM {
         let cycles = self.cpu.step(&mut self.inter);
 
         let start_debugger = self.inter.step(cycles, device);
-        let breakpoint = self.breakpoints.contains(&self.cpu.pc);
+        let breakpoint = self.breakpoints.contains(&self.cpu.pc) || self.temp_breakpoints.contains(&self.cpu.pc);
 
+        self.temp_breakpoints.remove(&self.cpu.pc);
 
         (cycles, start_debugger || breakpoint)
     }
@@ -161,6 +171,8 @@ impl VM {
 
             thread::sleep(time::Duration::milliseconds(3).to_std().unwrap());
         }
+
+        self.symbols.save().unwrap();
     }
 
     pub fn get_next_instruction(&self) -> u8 {
@@ -245,13 +257,39 @@ impl VM {
                     for addr in &self.breakpoints {
                         println!("* 0x{:04x}", addr);
                     }
+                    println!("");
+                    for addr in &self.temp_breakpoints {
+                        println!("# 0x{:04x}", addr);
+                    }
                 }
                 Ok(Command::AddBreakpoint(addr)) => {
                     self.breakpoints.insert(addr);
                 }
+                Ok(Command::AddSymBreakpoint(ref sym)) => {
+                    if let Some(addr) = self.symbols.reverse_get(&sym) {
+                        self.breakpoints.insert(addr);
+                    } else {
+                        println!("Unrecognized symbol {}", sym);
+                    }
+                }
+                Ok(Command::AddTempBreakpoint(addr)) => {
+                    self.temp_breakpoints.insert(addr);
+                }
+                Ok(Command::AddTempSymBreakpoint(ref sym)) => {
+                    if let Some(addr) = self.symbols.reverse_get(&sym) {
+                        self.temp_breakpoints.insert(addr);
+                    } else {
+                        println!("Unrecognized symbol {}", sym);
+                    }
+                }
                 Ok(Command::RemoveBreakpoint(addr)) => {
                     if !self.breakpoints.remove(&addr) {
                         println!("Breakpoint at 0x{:04x} does not exist", addr);
+                    }
+                }
+                Ok(Command::RemoveTempBreakpoint(addr)) => {
+                    if !self.temp_breakpoints.remove(&addr) {
+                        println!("Temporary breakpoint at 0x{:04x} does not exist", addr);
                     }
                 }
                 Ok(Command::Watchpoint) => {
@@ -266,6 +304,12 @@ impl VM {
                     if !self.inter.watchpoints.remove(&addr) {
                         println!("Watchpoint at 0x{:04x} does not exist", addr);
                     }
+                }
+                Ok(Command::AddSymbol(addr, ref sym)) => {
+                    self.symbols.insert(addr, &sym);
+                }
+                Ok(Command::RemoveSymbol(addr)) => {
+                    self.symbols.remove(addr);
                 }
                 Ok(Command::Exit) => {
                     return true;
@@ -298,8 +342,16 @@ impl VM {
             print!("  ");
         }
 
+        let symbol = if let Some(sym) = self.symbols.get(self.cursor) {
+            sym
+        } else {
+            ""
+        };
+
+        print!("{:20}", symbol);
+
         print!("0x{:04x}  ", self.cursor);
-        let opcode = decode_instr(&self.inter, self.cursor);
+        let opcode = decode_instr(&self.inter, &self.symbols, self.cursor);
 
         println!("{}", opcode);
 

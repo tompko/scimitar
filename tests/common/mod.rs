@@ -9,6 +9,7 @@ use self::gameboy::cartridge::Cartridge;
 use self::gameboy::interconnect::Interconnect;
 use self::gameboy::vm::VM;
 use self::gameboy::device::{self, Device};
+use self::gameboy::symbols::Symbols;
 
 struct TestDevice {
     buffer: Box<[u32]>,
@@ -26,6 +27,7 @@ impl Device for TestDevice {
     fn update(&mut self) {}
 
     fn set_frame_buffer(&mut self, buffer: &[u32]) {
+        #[cfg_attr(feature = "cargo-clippy", allow(needless_range_loop))]
         for i in 0..self.buffer.len() {
             self.buffer[i] = buffer[i];
         }
@@ -47,7 +49,7 @@ pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, hash: u32) {
 
     let mut device = TestDevice::new(interconnect.get_width(), interconnect.get_height());
 
-    let mut vm = VM::new(interconnect, false, false);
+    let mut vm = VM::new(interconnect, false, false, Symbols::default());
 
 
     for _ in 0..25000000 {
@@ -76,7 +78,7 @@ pub fn run_test_till_ed<P: AsRef<Path>>(file_name: P) {
 
     let mut device = TestDevice::new(interconnect.get_width(), interconnect.get_height());
 
-    let mut vm = VM::new(interconnect, false, false);
+    let mut vm = VM::new(interconnect, false, false, Symbols::default());
 
 
     while vm.get_next_instruction() != 0xed {
