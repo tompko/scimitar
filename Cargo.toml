@@ -4,11 +4,12 @@ version = "0.1.0"
 authors = ["tompko <tompko@gmail.com>"]
 
 [dependencies]
-clap = "2"
+app_dirs = "1.1"
 byteorder = "0.5"
-time = "0.1"
-rand = "0.3"
-minifb = "0.9.0"
-strfmt = "0.1.5"
+clap = "2"
 combine = "2.3.1"
 crc = "1.4.0"
+minifb = "0.9.0"
+rand = "0.3"
+strfmt = "0.1.5"
+time = "0.1"

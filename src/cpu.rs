@@ -2358,6 +2358,7 @@ impl Cpu {
                 let addr = self.read_pc_halfword(interconnect);
                 interconnect.write_byte(addr, self.a);
             }
+            0xed => {},
             0xee => {
                 let val = self.read_pc_byte(interconnect);
                 self.a = self.xor(val);

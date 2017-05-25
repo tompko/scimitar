@@ -17,6 +17,88 @@ A gameboy emulator in Rust.
 ## Mooneye
 Tested using master at f72ba415e1.
 
+### Mooneye GB acceptance tests
+
+| Test                    | Result |
+| ----------------------- | -------|
+| add sp e timing         | :x:    |
+| boot hwio dmg0          | :x:    |
+| boot hwio dmgABCXmgb    | :x:    |
+| boot hwio S             | :x:    |
+| boot regs dmg0          | :+1:   |
+| boot regs dmgABCX       | :+1:   |
+| boot regs mgb           | :+1:   |
+| boot regs sgb2          | :+1:   |
+| boot regs sgb           | :+1:   |
+| call cc timing2         | :x:    |
+| call cc timing          | :x:    |
+| call timing2            | :x:    |
+| call timing             | :x:    |
+| di timing GS            | :x:    |
+| div timing              | :x:    |
+| ei timing               | :x:    |
+| halt ime0 ei            | :x:    |
+| halt ime0 nointr timing | :x:    |
+| halt ime1 timing2 GS    | :x:    |
+| halt ime1 timing        | :x:    |
+| if ie registers         | :x:    |
+| intr timing             | :x:    |
+| jp cc timing            | :x:    |
+| jp timing               | :x:    |
+| ld hl sp e timing       | :x:    |
+| oam dma restart         | :x:    |
+| oam dma start           | :x:    |
+| oam dma timing          | :x:    |
+| pop timing              | :x:    |
+| push timing             | :x:    |
+| rapid di ei             | :x:    |
+| ret cc timing           | :x:    |
+| reti intr timing        | :x:    |
+| reti timing             | :x:    |
+| ret timing              | :x:    |
+| rst timing              | :x:    |
+
+### Mooneye Bits (unusable bits in memory and registers)
+
+| Test           | Result |
+| -------------- | -------|
+| mem oam        | :x:    |
+| reg f          | :x:    |
+| unused hwio GS | :x:    |
+
+
+### Mooneye GPU
+
+| Test                        | Result |
+| --------------------------- | -------|
+| hblank ly scx timing GS     | :x:    |
+| intr 1 2 timing GS          | :x:    |
+| intr 2 0 timing             | :x:    |
+| intr 2 mode0 timing         | :x:    |
+| intr 2 mode0 timing sprites | :x:    |
+| intr 2 mode3 timing         | :x:    |
+| intr 2 oam ok timing        | :x:    |
+| stat irq blocking           | :x:    |
+| vblank stat intr GS         | :x:    |
+
+### Mooneye Timer
+
+| Test                 | Result |
+| -------------------- | -------|
+| div write            | :+1:   |
+| rapid toggle         | :x:    |
+| tim00 div trigger    | :+1:   |
+| tim00                | :+1:   |
+| tim01 div trigger    | :+1:   |
+| tim01                | :+1:   |
+| tim10 div trigger    | :+1:   |
+| tim10                | :+1:   |
+| tim11 div trigger    | :+1:   |
+| tim11                | :+1:   |
+| tima reload          | :+1:   |
+| tima write reloading | :x:    |
+| tma write reloading  | :x:    |
+
 ### Emulator Only
 
 #### MBC1

@@ -1,11 +1,23 @@
+extern crate gameboy;
+
 mod common;
+
+use self::gameboy::config::model::Model;
 
 #[test]
 fn cpu_instrs() {
-    common::run_test_with_hash("tests/blargg/cpu_instrs.gb", 0xd9fc572a);
+    common::run_test_with_hash(
+        "tests/blargg/cpu_instrs.gb",
+        Model::Dmg,
+        0xd9fc572a
+    );
 }
 
 #[test]
 fn instr_timing() {
-    common::run_test_with_hash("tests/blargg/instr_timing.gb", 0xb376297f);
+    common::run_test_with_hash(
+        "tests/blargg/instr_timing.gb",
+        Model::Dmg,
+        0xb376297f
+    );
 }

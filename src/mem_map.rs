@@ -1,3 +1,7 @@
+pub const BOOT_ROM_START: u16 = 0x0000;
+pub const BOOT_ROM_LENGTH: u16 = 0x0100;
+pub const BOOT_ROM_END: u16 = BOOT_ROM_START + BOOT_ROM_LENGTH - 1;
+
 pub const ROM_START: u16 = 0x0000;
 pub const ROM_LENGTH: u16 = 0x8000;
 pub const ROM_END: u16 = ROM_START + ROM_LENGTH - 1;

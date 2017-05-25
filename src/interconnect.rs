@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use mem_map::*;
+use bootrom::Bootrom;
 use cartridge::Cartridge;
 use memory::Memory;
 use gpu::Gpu;
@@ -10,11 +11,14 @@ use gamepad::Gamepad;
 use interrupt::Irq;
 
 pub struct Interconnect {
+    boot_rom: Bootrom,
     cartridge: Cartridge,
     gpu: Gpu,
     apu: Apu,
     timer: Timer,
     gamepad: Gamepad,
+
+    boot_rom_active: bool,
 
     internal_ram: Memory,
     high_ram: Memory,
@@ -33,13 +37,16 @@ pub struct Interconnect {
 }
 
 impl Interconnect {
-    pub fn new(cartridge: Cartridge) -> Interconnect {
+    pub fn new(bootrom: Bootrom, cartridge: Cartridge) -> Interconnect {
         Interconnect {
+            boot_rom: bootrom,
             cartridge: cartridge,
             gpu: Gpu::new(),
             apu: Apu::new(),
             timer: Timer::default(),
             gamepad: Gamepad::new(),
+
+            boot_rom_active: true,
 
             internal_ram: Memory::new(INTERNAL_RAM_LENGTH),
             high_ram: Memory::new(HIGH_RAM_END),
@@ -62,6 +69,7 @@ impl Interconnect {
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn read_byte(&self, addr: u16) -> u8 {
         match addr {
+            BOOT_ROM_START...BOOT_ROM_END if self.boot_rom_active => self.boot_rom.read_byte(addr - BOOT_ROM_START),
             ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
             VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
             CRAM_START...CRAM_END => self.cartridge.read_byte(addr - ROM_START),
@@ -121,7 +129,7 @@ impl Interconnect {
                 self.dma_active = true;
             }
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
-            0xff50 => self.cartridge.disable_boot_rom(),
+            0xff50 => self.boot_rom_active = false,
             0xffff => self.ie_register = val,
             _ => {} // Writes to unused addresses have no effect
         }

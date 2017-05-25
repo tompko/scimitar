@@ -35,7 +35,7 @@ impl Timer {
             0xff04 => (self.divider >> 8) as u8,
             0xff05 => self.timer_counter,
             0xff06 => self.timer_modulo,
-            0xff07 => self.timer_control(),
+            0xff07 => 0xf8 | self.timer_control(),
             _ => 0xff,
         }
     }

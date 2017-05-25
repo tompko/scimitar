@@ -5,7 +5,9 @@ extern crate gameboy;
 use std::path::Path;
 use self::byteorder::{ByteOrder, LittleEndian};
 use self::crc::crc32::checksum_ieee;
+use self::gameboy::bootrom::Bootrom;
 use self::gameboy::cartridge::Cartridge;
+use self::gameboy::config::model::{Model, DEFAULT_MODEL_PRIORITY};
 use self::gameboy::interconnect::Interconnect;
 use self::gameboy::vm::VM;
 use self::gameboy::device::{self, Device};
@@ -43,16 +45,16 @@ impl Device for TestDevice {
 }
 
 #[allow(dead_code)]
-pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, hash: u32) {
-    let cartridge = Cartridge::load(file_name).unwrap();
-    let interconnect = Interconnect::new(cartridge);
+pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, model: Model, hash: u32) {
+    let cartridge = Cartridge::load(file_name.as_ref()).unwrap();
+    let bootrom = Bootrom::lookup(&[model]);
+    let interconnect = Interconnect::new(bootrom, cartridge);
 
     let mut device = TestDevice::new(interconnect.get_width(), interconnect.get_height());
 
-    let mut vm = VM::new(interconnect, false, false, Symbols::default());
+    let mut vm = VM::new(interconnect, false, Symbols::default());
 
-
-    for _ in 0..25000000 {
+    for _ in 0..30000000 {
         vm.step(&mut device);
     }
 
@@ -72,18 +74,31 @@ pub fn run_test_with_hash<P: AsRef<Path>>(file_name: P, hash: u32) {
 }
 
 #[allow(dead_code)]
-pub fn run_test_till_ed<P: AsRef<Path>>(file_name: P) {
-    let cartridge = Cartridge::load(file_name).unwrap();
-    let interconnect = Interconnect::new(cartridge);
+pub fn run_test_till_ed<P: AsRef<Path>>(file_name: P, model: Model) {
+    let cartridge = Cartridge::load(file_name.as_ref()).unwrap();
+    let bootrom = Bootrom::lookup(&[model]);
+    let interconnect = Interconnect::new(bootrom, cartridge);
 
     let mut device = TestDevice::new(interconnect.get_width(), interconnect.get_height());
 
-    let mut vm = VM::new(interconnect, false, false, Symbols::default());
-
+    let mut vm = VM::new(interconnect, false, Symbols::default());
 
     while vm.get_next_instruction() != 0xed {
         vm.step(&mut device);
     }
 
-    assert_eq!(vm.get_cpu().a, 0x00);
+    assert_eq!(vm.get_cpu().a, 0);
+    assert_eq!(vm.get_cpu().b, 3);
+    assert_eq!(vm.get_cpu().c, 5);
+    assert_eq!(vm.get_cpu().d, 8);
+    assert_eq!(vm.get_cpu().e, 13);
+    assert_eq!(vm.get_cpu().h, 21);
+    assert_eq!(vm.get_cpu().l, 34);
+}
+
+#[allow(dead_code)]
+pub fn run_all_models_till_ed<P: AsRef<Path>>(file_name: P) {
+    for m in &DEFAULT_MODEL_PRIORITY {
+        run_test_till_ed(file_name.as_ref(), *m);
+    }
 }

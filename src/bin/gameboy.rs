@@ -3,9 +3,11 @@ extern crate clap;
 extern crate gameboy;
 extern crate minifb;
 
+use std::path::Path;
 use clap::{Arg, App};
 use minifb::{Key, Scale, WindowOptions, Window};
 use gameboy::vm::VM;
+use gameboy::bootrom::Bootrom;
 use gameboy::cartridge::Cartridge;
 use gameboy::interconnect::Interconnect;
 use gameboy::device::{self, Device};
@@ -85,6 +87,7 @@ fn main() {
                  .help("Sets the boot rom to use")
                  .short("b")
                  .long("boot-rom")
+                 .required(true)
                  .takes_value(true))
         .arg(Arg::with_name("sym-file")
                  .help("Sets the symbol file to use")
@@ -99,14 +102,11 @@ fn main() {
         .get_matches();
 
     let input_file = matches.value_of("INPUT").unwrap();
-    let mut cartridge = Cartridge::load(input_file).unwrap();
-    let mut with_boot_rom = false;
+    let boot_rom_file = matches.value_of("boot-rom").unwrap();
+    let cartridge = Cartridge::load(Path::new(input_file)).unwrap();
     let start_in_debug = matches.is_present("debug");
 
-    if let Some(boot_file) = matches.value_of("boot-rom") {
-        with_boot_rom = true;
-        cartridge.load_boot_rom(boot_file).unwrap();
-    }
+    let boot_rom = Bootrom::load(Path::new(boot_rom_file)).unwrap();
 
     let symbols = if let Some(sym_file) = matches.value_of("sym-file") {
         Symbols::load(sym_file).unwrap()
@@ -114,11 +114,11 @@ fn main() {
         Symbols::default()
     };
 
-    let interconnect = Interconnect::new(cartridge);
+    let interconnect = Interconnect::new(boot_rom, cartridge);
     let width = interconnect.get_width();
     let height = interconnect.get_height();
 
-    let mut vm = VM::new(interconnect, with_boot_rom, start_in_debug, symbols);
+    let mut vm = VM::new(interconnect, start_in_debug, symbols);
 
     let window_options = WindowOptions {
         borderless: false,

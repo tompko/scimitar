@@ -35,9 +35,6 @@ impl fmt::Display for Mbc {
 pub struct Cartridge {
     rom: Box<[u8]>,
     ram: Box<[u8]>,
-    boot_rom: Box<[u8]>,
-
-    boot_rom_active: bool,
 
     mbc: Mbc,
     rom_bank_lower: usize,
@@ -50,7 +47,7 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn load<P: AsRef<Path>>(file_name: P) -> io::Result<Cartridge> {
+    pub fn load(file_name: &Path) -> io::Result<Cartridge> {
         let mut file = File::open(file_name)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
@@ -65,17 +62,6 @@ impl Cartridge {
         println!("Ram Size: {} KByte", cart.ram.len() / 1024);
 
         Ok(cart)
-    }
-
-    pub fn load_boot_rom<P: AsRef<Path>>(&mut self, file_name: P) -> io::Result<()> {
-        let mut file = File::open(file_name)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-
-        self.boot_rom = buffer.into_boxed_slice();
-        self.boot_rom_active = true;
-
-        Ok(())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Cartridge {
@@ -96,9 +82,7 @@ impl Cartridge {
         Cartridge {
             rom: bytes_copy.into_boxed_slice(),
             ram: vec![0; ram_size].into_boxed_slice(),
-            boot_rom: Box::default(),
 
-            boot_rom_active: false,
             mbc: mbc,
 
             rom_bank_lower: 1,
@@ -116,7 +100,6 @@ impl Cartridge {
         let (lower, upper) = self.rom_offsets;
 
         match addr {
-            0...0x00ff if self.boot_rom_active => self.boot_rom[addr],
             0...0x3fff => self.rom[lower + addr],
             0x4000...0x7fff => self.rom[upper + (addr - 0x4000)],
             0xa000...0xbfff => {
@@ -160,10 +143,6 @@ impl Cartridge {
                        val)
             }
         }
-    }
-
-    pub fn disable_boot_rom(&mut self) {
-        self.boot_rom_active = false;
     }
 
     fn update_rom_offset(&mut self) {

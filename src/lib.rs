@@ -3,7 +3,9 @@ extern crate time;
 extern crate combine;
 
 pub mod vm;
+pub mod bootrom;
 pub mod cartridge;
+pub mod config;
 pub mod cpu;
 pub mod interconnect;
 pub mod device;

@@ -366,7 +366,7 @@ impl From<u8> for LcdcStatusReg {
 
 impl Into<u8> for LcdcStatusReg {
     fn into(self) -> u8 {
-        let mut ret = self.mode;
+        let mut ret = 0x80 | self.mode;
 
         if self.coincidence_interrupt_enable {
             ret |= 1 << 6;
