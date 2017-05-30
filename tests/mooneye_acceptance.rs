@@ -125,7 +125,6 @@ fn di_timing_gs() {
 }
 
 #[test]
-#[ignore]
 fn div_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/div_timing.gb",

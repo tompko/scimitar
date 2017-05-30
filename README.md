@@ -35,7 +35,7 @@ Tested using master at f72ba415e1.
 | call timing2            | :x:    |
 | call timing             | :x:    |
 | di timing GS            | :x:    |
-| div timing              | :x:    |
+| div timing              | :+1:   |
 | ei timing               | :x:    |
 | halt ime0 ei            | :x:    |
 | halt ime0 nointr timing | :x:    |
@@ -62,9 +62,9 @@ Tested using master at f72ba415e1.
 
 | Test           | Result |
 | -------------- | -------|
-| mem oam        | :x:    |
-| reg f          | :x:    |
-| unused hwio GS | :x:    |
+| mem oam        | :+1:   |
+| reg f          | :+1:   |
+| unused hwio GS | :+1:   |
 
 
 ### Mooneye GPU
