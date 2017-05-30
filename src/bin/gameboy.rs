@@ -3,15 +3,10 @@ extern crate clap;
 extern crate gameboy;
 extern crate minifb;
 
-use std::path::Path;
 use clap::{Arg, App};
 use minifb::{Key, Scale, WindowOptions, Window};
-use gameboy::vm::VM;
-use gameboy::bootrom::Bootrom;
-use gameboy::cartridge::Cartridge;
-use gameboy::interconnect::Interconnect;
+use gameboy::Gameboy;
 use gameboy::device::{self, Device};
-use gameboy::symbols::Symbols;
 
 struct ConsoleDevice {
     buffer: Box<[u32]>,
@@ -101,24 +96,14 @@ fn main() {
                  .takes_value(false))
         .get_matches();
 
-    let input_file = matches.value_of("INPUT").unwrap();
-    let boot_rom_file = matches.value_of("boot-rom").unwrap();
-    let cartridge = Cartridge::load(Path::new(input_file)).unwrap();
-    let start_in_debug = matches.is_present("debug");
+    let mut gameboy = Gameboy::default()
+        .with_cartridge(matches.value_of("INPUT"))
+        .with_boot_rom(matches.value_of("boot-rom"))
+        .with_symbols(matches.value_of("sym-file"))
+        .start_in_debug(matches.is_present("debug"))
+        .build();
 
-    let boot_rom = Bootrom::load(Path::new(boot_rom_file)).unwrap();
-
-    let symbols = if let Some(sym_file) = matches.value_of("sym-file") {
-        Symbols::load(sym_file).unwrap()
-    } else {
-        Symbols::default()
-    };
-
-    let interconnect = Interconnect::new(boot_rom, cartridge);
-    let width = interconnect.get_width();
-    let height = interconnect.get_height();
-
-    let mut vm = VM::new(interconnect, start_in_debug, symbols);
+    let (width, height) = gameboy.get_dimensions();
 
     let window_options = WindowOptions {
         borderless: false,
@@ -127,9 +112,9 @@ fn main() {
         scale: Scale::X2,
     };
 
-    let window = Window::new("GBrs", width, height, window_options).unwrap();
+    let window = Window::new("Scimitar", width, height, window_options).unwrap();
 
     let mut device = ConsoleDevice::new(window, width, height);
 
-    vm.run(&mut device);
+    gameboy.run(&mut device);
 }

@@ -140,6 +140,10 @@ impl VM {
         &self.cpu
     }
 
+    pub fn get_dimensions(&self) -> (usize, usize) {
+        (self.inter.get_width(), self.inter.get_height())
+    }
+
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms))]
     fn run_debug_commands(&mut self, device: &mut Device) -> bool {
         while let Ok(command_string) = self.stdin_receiver.try_recv() {
