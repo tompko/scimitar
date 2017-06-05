@@ -3,12 +3,13 @@ use std::sync::mpsc::{channel, Receiver};
 use std::io::{stdin, stdout, Write};
 use std::collections::HashSet;
 use interconnect::Interconnect;
-use cpu::Cpu;
+use cpu::{Cpu, Bus};
 use device::Device;
 use time::{self, SteadyTime};
 use command::*;
 use opcodes::*;
 use symbols::Symbols;
+use events::Event;
 
 // The Game Boy runs at 4194304 Hz which is 8192 clocks every 1953125 nanoseconds
 const SYNC_PERIOD_NS: i64 = 1953125;
@@ -77,14 +78,21 @@ impl VM {
     }
 
     pub fn step(&mut self, device: &mut Device) -> (u16, bool) {
-        let cycles = self.cpu.step(&mut self.inter);
+        let mut events = Vec::new();
+        let cycles = self.cpu.step(
+            Bus{
+                interconnect: &mut self.inter,
+                device: device,
+                events: &mut events,
+            }
+        );
 
-        let start_debugger = self.inter.step(cycles, device);
         let breakpoint = self.breakpoints.contains(&self.cpu.pc) || self.temp_breakpoints.contains(&self.cpu.pc);
+        let watchpoint = events.iter().any(|x| *x == Event::Watchpoint);
 
         self.temp_breakpoints.remove(&self.cpu.pc);
 
-        (cycles, start_debugger || breakpoint)
+        (cycles, breakpoint || watchpoint)
     }
 
     pub fn run(&mut self, device: &mut Device) {

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+
 use mem_map::*;
 use bootrom::Bootrom;
 use cartridge::Cartridge;
@@ -9,6 +10,7 @@ use apu::Apu;
 use timer::Timer;
 use gamepad::Gamepad;
 use interrupt::Irq;
+use events::Event;
 
 pub struct Interconnect {
     boot_rom: Bootrom,
@@ -150,7 +152,7 @@ impl Interconnect {
         self.write_byte(addr + 1, msb);
     }
 
-    pub fn step(&mut self, cycles: u16, device: &mut Device) -> bool {
+    pub fn step(&mut self, cycles: u16, device: &mut Device, events: &mut Vec<Event>) {
         if self.dma_active {
             let index = self.dma_index;
             let val = self.read_byte(self.dma_source + index);
@@ -171,9 +173,10 @@ impl Interconnect {
 
         self.if_register |= irq.get_if();
 
-        let trigger_watchpoint = self.trigger_watchpoint;
-        self.trigger_watchpoint = false;
-        trigger_watchpoint
+        if self.trigger_watchpoint {
+            events.push(Event::Watchpoint);
+            self.trigger_watchpoint = false;
+        }
     }
 
     pub fn get_width(&self) -> usize {

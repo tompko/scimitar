@@ -1,4 +1,147 @@
 use interconnect::Interconnect;
+use events::Event;
+use device::Device;
+
+pub struct Bus<'a, 'b, 'c> {
+    pub interconnect: &'a mut Interconnect,
+    pub device: &'b mut Device,
+    pub events: &'c mut Vec<Event>,
+}
+
+impl<'a, 'b, 'c> Bus<'a, 'b, 'c> {
+    fn step(&mut self, cycles: u16) {
+        self.interconnect.step(cycles, self.device, self.events);
+    }
+}
+
+const CYCLES_PER_STEP: u16  = 4;
+
+macro_rules! read_u8 {
+    ($b: expr, $a: expr) => {
+        {
+            let val = $b.interconnect.read_byte($a);
+            $b.step(CYCLES_PER_STEP);
+            val
+        }
+    }
+}
+
+macro_rules! read_pc_u8 {
+    ($c: expr, $b: expr) => {
+        {
+            let val = $b.interconnect.read_byte($c.pc);
+            $b.step(CYCLES_PER_STEP);
+
+            if $c.halted == -1 {
+                $c.halted = 0;
+            } else {
+                $c.pc += 1;
+            }
+            val
+        }
+    }
+}
+
+macro_rules! write_u8 {
+    ( $b: expr, $a: expr, $v: expr) => {
+        {
+            $b.interconnect.write_byte($a, $v);
+            $b.step(CYCLES_PER_STEP);
+        }
+    }
+}
+
+macro_rules! write_u16 {
+    ($b: expr, $a: expr, $v: expr) => {
+        {
+            let msb = ($v >> 8) as u8;
+            let lsb = ($v & 0xff) as u8;
+
+            write_u8!($b, $a + 1, msb);
+            write_u8!($b, $a, lsb);
+        }
+    }
+}
+
+macro_rules! push_u8 {
+    ($c: expr, $b: expr, $v: expr) => {
+        {
+            $c.sp -= 1;
+            write_u8!($b, $c.sp, $v);
+        }
+    }
+}
+
+macro_rules! push_u16 {
+    ($c: expr, $b: expr, $v: expr) => {
+        {
+            let msb = ($v >> 8) as u8;
+            let lsb = ($v & 0xff) as u8;
+            $b.step(CYCLES_PER_STEP); // Internal delay
+            push_u8!($c, $b, msb);
+            push_u8!($c, $b, lsb);
+        }
+    }
+}
+
+macro_rules! pop_u8 {
+    ($c: expr, $b: expr) => {
+        {
+            let val = read_u8!($b, $c.sp);
+            $c.sp += 1;
+            val
+        }
+    }
+}
+
+macro_rules! pop_u16 {
+    ($c: expr, $b: expr) => {
+        {
+            let lsb = pop_u8!($c, $b) as u16;
+            let msb = pop_u8!($c, $b) as u16;
+
+            (msb << 8) | lsb
+        }
+    }
+}
+
+macro_rules! call {
+    ($c: expr, $b: expr, $a: expr) => {
+        {
+            let pc = $c.pc;
+            push_u16!($c, $b, pc);
+            $c.pc = $a;
+        }
+    }
+}
+
+macro_rules! ret {
+    ($c: expr, $b: expr) => {
+        {
+            let addr = pop_u16!($c, $b);
+            $b.step(CYCLES_PER_STEP); // Internal delay
+            $c.pc = addr;
+        }
+    }
+}
+
+macro_rules! rr {
+    ($c: expr, $b: expr, $v: expr) => {
+        {
+            let carry = if $c.f.c { 1 } else { 0 };
+            let ret = ($v >> 1) | (carry << 7);
+
+            $c.f.z = ret == 0;
+            $c.f.n = false;
+            $c.f.h = false;
+            $c.f.c = ($v & 0x01) != 0;
+
+            $b.interconnect.step(CYCLES_PER_STEP, $b.device, $b.events);
+
+            ret
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Flags {
@@ -68,14 +211,14 @@ static CYCLE_COUNTS: [u16; 256] = [
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     8,  8,  8,  8,  8,  8,  0,  8,  4,  4,  4,  4,  4,  4,  8,  4,
+     8,  8,  8,  8,  8,  8,  4,  8,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
      8, 12, 12, 16, 12, 16,  8, 16,  8, 16, 12,  0, 12, 24,  8, 16,
      8, 12, 12,  0, 12, 16,  8, 16,  8, 16, 12,  0, 12,  0,  8, 16,
-    12, 12,  8,  0,  0, 16,  8, 16, 16,  4, 16,  0,  0,  0,  8, 16,
+    12, 12,  8,  0,  0, 16,  8, 16, 16,  4, 16,  0,  0,  4,  8, 16,
     12, 12,  8,  4,  0, 16,  8, 16, 12,  8, 16,  4,  0,  0,  8, 16
 ];
 
@@ -131,13 +274,21 @@ impl Cpu {
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, cyclomatic_complexity))]
-    pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
-        let interrupt_flags = interconnect.read_byte(0xff0f);
-        let interrupt_enable = interconnect.read_byte(0xffff);
+    pub fn step(&mut self, bus: Bus) -> u16 {
+        let mut bus = bus;
+        let cycles = self.inner_step(&mut bus);
+
+        cycles
+    }
+
+    pub fn inner_step(&mut self, bus: &mut Bus) -> u16 {
+        let interrupt_flags = bus.interconnect.read_byte(0xff0f);
+        let interrupt_enable = bus.interconnect.read_byte(0xffff);
         let interrupt_request = interrupt_flags & interrupt_enable;
 
         if self.halted == 1 && interrupt_request == 0 {
             // Step forward one NOP
+            bus.step(CYCLES_PER_STEP);
             return 4;
         }
 
@@ -145,29 +296,33 @@ impl Cpu {
             self.halted = 0;
         }
 
+        let mut cycle_count = 0;
+
         if self.interrupts_enabled && (interrupt_request != 0) {
-            self.handle_interrupt(interconnect, interrupt_flags, interrupt_enable);
+            self.handle_interrupt(bus, interrupt_flags, interrupt_enable);
+            cycle_count += 12;
         }
 
         let old_pc = self.pc;
-        let instr = self.read_pc_byte(interconnect);
-        let mut cycle_count = CYCLE_COUNTS[instr as usize];
+        let instr = read_pc_u8!(self, bus);
+        cycle_count += CYCLE_COUNTS[instr as usize];
 
         match instr {
             0x00 => {} // NOP - No Operation
             0x01 => {
                 // LD BC, nn
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 self.b = msb;
                 self.c = lsb;
             }
-            0x02 => interconnect.write_byte(self.bc(), self.a), // LD (BC), A
+            0x02 => write_u8!(bus, self.bc(), self.a), // LD (BC), A
             0x03 => {
                 // INC BC
                 let bc = self.bc().wrapping_add(1);
                 self.set_bc(bc);
+                bus.step(CYCLES_PER_STEP);
             }
             0x04 => {
                 let val = self.b;
@@ -177,7 +332,7 @@ impl Cpu {
                 let val = self.b;
                 self.b = self.dec(val);
             }
-            0x06 => self.b = self.read_pc_byte(interconnect), // LD B,n
+            0x06 => self.b = read_pc_u8!(self, bus), // LD B,n
             0x07 => {
                 let val = self.a;
                 self.a = self.rlc(val);
@@ -185,9 +340,9 @@ impl Cpu {
             }
             0x08 => {
                 // LD (nn), SP
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
-                interconnect.write_halfword(addr, self.sp);
+                write_u16!(bus, addr, self.sp);
             }
             0x09 => {
                 // ADD HL, BC
@@ -195,15 +350,17 @@ impl Cpu {
                 let val = self.add16(hl, bc);
 
                 self.set_hl(val);
+                bus.step(CYCLES_PER_STEP);
             }
             0x0a => {
                 let addr = self.bc();
-                self.a = interconnect.read_byte(addr);
+                self.a = read_u8!(bus, addr);
             }
             0x0b => {
                 // DEC BC
                 let bc = self.bc().wrapping_sub(1);
                 self.set_bc(bc);
+                bus.step(CYCLES_PER_STEP);
             }
             0x0c => {
                 let val = self.c;
@@ -213,7 +370,7 @@ impl Cpu {
                 let val = self.c;
                 self.c = self.dec(val);
             }
-            0x0e => self.c = self.read_pc_byte(interconnect), // LD C,n
+            0x0e => self.c = read_pc_u8!(self, bus), // LD C,n
             0x0f => {
                 // RRC A
                 let val = self.a;
@@ -222,17 +379,18 @@ impl Cpu {
             }
             0x11 => {
                 // LD DE, nn
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 self.d = msb;
                 self.e = lsb;
             }
-            0x12 => interconnect.write_byte(self.de(), self.a), // LD (DE), A
+            0x12 => write_u8!(bus, self.de(), self.a), // LD (DE), A
             0x13 => {
                 // INC DE
                 let de = self.de().wrapping_add(1);
                 self.set_de(de);
+                bus.step(CYCLES_PER_STEP);
             }
             0x14 => {
                 let val = self.d;
@@ -242,7 +400,7 @@ impl Cpu {
                 let val = self.d;
                 self.d = self.dec(val);
             }
-            0x16 => self.d = self.read_pc_byte(interconnect), // LD D,n
+            0x16 => self.d = read_pc_u8!(self, bus), // LD D,n
             0x17 => {
                 let val = self.a;
                 self.a = self.rl(val);
@@ -250,8 +408,9 @@ impl Cpu {
             }
             0x18 => {
                 // JR n - realtive jump by n
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 self.pc = self.pc.wrapping_add(n as i8 as u16);
+                bus.step(CYCLES_PER_STEP);
             }
             0x19 => {
                 // ADD HL, DE
@@ -259,11 +418,13 @@ impl Cpu {
                 let val = self.add16(hl, de);
 
                 self.set_hl(val);
+                bus.step(CYCLES_PER_STEP);
             }
-            0x1a => self.a = interconnect.read_byte(self.de()),
+            0x1a => self.a = read_u8!(bus, self.de()),
             0x1b => {
                 // DEC DE
                 let de = self.de().wrapping_sub(1);
+                bus.step(CYCLES_PER_STEP);
                 self.set_de(de);
             }
             0x1c => {
@@ -274,7 +435,7 @@ impl Cpu {
                 let val = self.e;
                 self.e = self.dec(val);
             }
-            0x1e => self.e = self.read_pc_byte(interconnect), // LD E,n
+            0x1e => self.e = read_pc_u8!(self, bus), // LD E,n
             0x1f => {
                 // RR A
                 let val = self.a;
@@ -283,24 +444,25 @@ impl Cpu {
             }
             0x20 => {
                 // JR NZ, n
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
 
                 if !self.f.z {
                     self.pc = self.pc.wrapping_add(n);
+                    bus.interconnect.step(CYCLES_PER_STEP, bus.device, bus.events);
                     cycle_count += 4;
                 }
             }
             0x21 => {
                 // LD HL, nn
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 self.h = msb;
                 self.l = lsb;
             }
             0x22 => {
                 // LDI (HL), A
-                interconnect.write_byte(self.hl(), self.a);
+                write_u8!(bus, self.hl(), self.a);
                 let val = self.hl().wrapping_add(1);
 
                 self.h = (val >> 8) as u8;
@@ -309,6 +471,7 @@ impl Cpu {
             0x23 => {
                 // INC DE
                 let hl = self.hl().wrapping_add(1);
+                bus.step(CYCLES_PER_STEP);
                 self.set_hl(hl);
             }
             0x24 => {
@@ -319,7 +482,7 @@ impl Cpu {
                 let val = self.h;
                 self.h = self.dec(val);
             }
-            0x26 => self.h = self.read_pc_byte(interconnect), // LD H,n
+            0x26 => self.h = read_pc_u8!(self, bus), // LD H,n
             0x27 => {
                 // DAA - Decimal adjust a
                 let mut val = self.a as u8;
@@ -351,10 +514,11 @@ impl Cpu {
             }
             0x28 => {
                 // JR Z, n
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
 
                 if self.f.z {
                     self.pc = self.pc.wrapping_add(n);
+                    bus.step(CYCLES_PER_STEP);
                     cycle_count += 4;
                 }
             }
@@ -362,12 +526,13 @@ impl Cpu {
                 // ADD HL, HL
                 let hl = self.hl();
                 let val = self.add16(hl, hl);
+                bus.step(CYCLES_PER_STEP);
 
                 self.set_hl(val);
             }
             0x2a => {
                 // LDI A, (HL) - Load the value at address HL into A, increment HL
-                self.a = interconnect.read_byte(self.hl());
+                self.a = read_u8!(bus, self.hl());
                 let val = self.hl().wrapping_add(1);
 
                 self.h = (val >> 8) as u8;
@@ -376,6 +541,7 @@ impl Cpu {
             0x2b => {
                 // DEC HL
                 let hl = self.hl().wrapping_sub(1);
+                bus.step(CYCLES_PER_STEP);
                 self.set_hl(hl);
             }
             0x2c => {
@@ -386,7 +552,7 @@ impl Cpu {
                 let val = self.l;
                 self.l = self.dec(val);
             }
-            0x2e => self.l = self.read_pc_byte(interconnect), // LD L,n
+            0x2e => self.l = read_pc_u8!(self, bus), // LD L,n
             0x2f => {
                 self.a = !self.a;
 
@@ -395,17 +561,18 @@ impl Cpu {
             }
             0x30 => {
                 // JMP NC, n
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
 
                 if !self.f.c {
                     self.pc = self.pc.wrapping_add(n);
+                    bus.step(CYCLES_PER_STEP);
                     cycle_count += 4;
                 }
             }
             0x31 => {
                 // LD SP, nn
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 let val = ((msb as u16) << 8) | lsb as u16;
 
@@ -413,7 +580,7 @@ impl Cpu {
             }
             0x32 => {
                 // LDD (HL), A
-                interconnect.write_byte(self.hl(), self.a);
+                write_u8!(bus, self.hl(), self.a);
                 let val = self.hl().wrapping_sub(1);
 
                 self.h = (val >> 8) as u8;
@@ -423,19 +590,23 @@ impl Cpu {
                 // INC SP
                 let sp = self.sp.wrapping_add(1);
                 self.sp = sp;
+                bus.step(CYCLES_PER_STEP);
             }
             0x34 => {
-                let val = interconnect.read_byte(self.hl());
-                interconnect.write_byte(self.hl(), self.inc(val));
+                // INC (HL)
+                let val = read_u8!(bus, self.hl());
+                write_u8!(bus, self.hl(), self.inc(val));
             }
             0x35 => {
-                let val = interconnect.read_byte(self.hl());
-                interconnect.write_byte(self.hl(), self.dec(val));
+                // DEC (HL)
+                let val = read_u8!(bus, self.hl());
+                write_u8!(bus, self.hl(), self.dec(val));
             }
             0x36 => {
-                let val = self.read_pc_byte(interconnect);
+                // LD (HL), n
+                let val = read_pc_u8!(self, bus);
 
-                interconnect.write_byte(self.hl(), val);
+                write_u8!(bus, self.hl(), val);
             }
             0x37 => {
                 // SCF
@@ -445,10 +616,11 @@ impl Cpu {
             }
             0x38 => {
                 // JMP C, n
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
 
                 if self.f.c {
                     self.pc = self.pc.wrapping_add(n);
+                    bus.step(CYCLES_PER_STEP);
                     cycle_count += 4;
                 }
             }
@@ -456,11 +628,12 @@ impl Cpu {
                 // ADD HL, SP
                 let (hl, sp) = (self.hl(), self.sp);
                 let val = self.add16(hl, sp);
+                bus.step(CYCLES_PER_STEP);
 
                 self.set_hl(val);
             }
             0x3a => {
-                self.a = interconnect.read_byte(self.hl());
+                self.a = read_u8!(bus, self.hl());
                 let val = self.hl().wrapping_sub(1);
 
                 self.h = (val >> 8) as u8;
@@ -469,6 +642,7 @@ impl Cpu {
             0x3b => {
                 // DEC SP
                 let sp = self.sp.wrapping_sub(1);
+                bus.step(CYCLES_PER_STEP);
                 self.sp = sp;
             }
             0x3c => {
@@ -481,7 +655,7 @@ impl Cpu {
             }
             0x3e => {
                 // LD A, # - Load immediate 8-bit into A
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
 
                 self.a = val;
             }
@@ -497,7 +671,7 @@ impl Cpu {
             0x43 => self.b = self.e, // LD B, E
             0x44 => self.b = self.h, // LD B, H
             0x45 => self.b = self.l, // LD B, L
-            0x46 => self.b = interconnect.read_byte(self.hl()), // LD B, (HL)
+            0x46 => self.b = read_u8!(bus, self.hl()), // LD B, (HL)
             0x47 => self.b = self.a, // LD B, A
             0x48 => self.c = self.b, // LD C, B
             0x49 => {} // LD C, C
@@ -505,7 +679,7 @@ impl Cpu {
             0x4b => self.c = self.e, // LD C, E
             0x4c => self.c = self.h, // LD C, H
             0x4d => self.c = self.l, // LD C, L
-            0x4e => self.c = interconnect.read_byte(self.hl()), // LD C, (HL)
+            0x4e => self.c = read_u8!(bus, self.hl()), // LD C, (HL)
             0x4f => self.c = self.a, // LD C, A
             0x50 => self.d = self.b, // LD D, B
             0x51 => self.d = self.c, // LD D, C
@@ -513,7 +687,7 @@ impl Cpu {
             0x53 => self.d = self.e, // LD D, E
             0x54 => self.d = self.h, // LD D, H
             0x55 => self.d = self.l, // LD D, L
-            0x56 => self.d = interconnect.read_byte(self.hl()), // LD D, (HL)
+            0x56 => self.d = read_u8!(bus, self.hl()), // LD D, (HL)
             0x57 => self.d = self.a, // LD D, A
             0x58 => self.e = self.b, // LD E, B
             0x59 => self.e = self.c, // LD E, C
@@ -521,7 +695,7 @@ impl Cpu {
             0x5b => {} // LD E, E
             0x5c => self.e = self.h, // LD E, H
             0x5d => self.e = self.l, // LD E, L
-            0x5e => self.e = interconnect.read_byte(self.hl()), // LD E, (HL)
+            0x5e => self.e = read_u8!(bus, self.hl()), // LD E, (HL)
             0x5f => self.e = self.a, // LD E, A
             0x60 => self.h = self.b, // LD H, B
             0x61 => self.h = self.c, // LD H, C
@@ -529,7 +703,7 @@ impl Cpu {
             0x63 => self.h = self.e, // LD H, E
             0x64 => {} // LD H, H
             0x65 => self.h = self.l, // LD H, L
-            0x66 => self.h = interconnect.read_byte(self.hl()), // LD H, (HL)
+            0x66 => self.h = read_u8!(bus, self.hl()), // LD H, (HL)
             0x67 => self.h = self.a, // LD H, A
             0x68 => self.l = self.b, // LD L, B
             0x69 => self.l = self.c, // LD L, C
@@ -538,13 +712,13 @@ impl Cpu {
             0x6c => self.l = self.h, // LD L, H
             0x6f => self.l = self.a, // LD L, A
             0x6d => {} // LD L, L
-            0x6e => self.l = interconnect.read_byte(self.hl()), // LD L, (HL)
-            0x70 => interconnect.write_byte(self.hl(), self.b), // LD (HL), B
-            0x71 => interconnect.write_byte(self.hl(), self.c), // LD (HL), C
-            0x72 => interconnect.write_byte(self.hl(), self.d), // LD (HL), D
-            0x73 => interconnect.write_byte(self.hl(), self.e), // LD (HL), E
-            0x74 => interconnect.write_byte(self.hl(), self.h), // LD (HL), H
-            0x75 => interconnect.write_byte(self.hl(), self.l), // LD (HL), L
+            0x6e => self.l = read_u8!(bus, self.hl()), // LD L, (HL)
+            0x70 => write_u8!(bus, self.hl(), self.b), // LD (HL), B
+            0x71 => write_u8!(bus, self.hl(), self.c), // LD (HL), C
+            0x72 => write_u8!(bus, self.hl(), self.d), // LD (HL), D
+            0x73 => write_u8!(bus, self.hl(), self.e), // LD (HL), E
+            0x74 => write_u8!(bus, self.hl(), self.h), // LD (HL), H
+            0x75 => write_u8!(bus, self.hl(), self.l), // LD (HL), L
             0x76 => {
                 // HALT
                 if !self.interrupts_enabled && interrupt_request != 0 {
@@ -553,7 +727,7 @@ impl Cpu {
                     self.halted = 1;
                 }
             }
-            0x77 => interconnect.write_byte(self.hl(), self.a), // LD (HL), A
+            0x77 => write_u8!(bus, self.hl(), self.a), // LD (HL), A
             0x78 => self.a = self.b, // LD A, B
             0x79 => self.a = self.c, // LD A, C
             0x7a => self.a = self.d, // LD A, D
@@ -563,7 +737,7 @@ impl Cpu {
             0x7e => {
                 // LD A, (HL)
                 let addr = self.hl();
-                self.a = interconnect.read_byte(addr);
+                self.a = read_u8!(bus, addr);
             }
             0x7f => {} // LD A, A
             0x80 => {
@@ -598,7 +772,7 @@ impl Cpu {
             }
             0x86 => {
                 // ADD A, (HL)
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.a = self.addc(val, false);
             }
             0x87 => {
@@ -644,7 +818,7 @@ impl Cpu {
             }
             0x8e => {
                 // ADDC A, (HL)
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 let carry = self.f.c;
                 self.a = self.addc(val, carry);
             }
@@ -686,7 +860,7 @@ impl Cpu {
             }
             0x96 => {
                 // SUB A, (HL)
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.a = self.subc(val, false);
             }
             0x97 => {
@@ -732,7 +906,7 @@ impl Cpu {
             }
             0x9e => {
                 // SUBC A, (HL)
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 let carry = self.f.c;
                 self.a = self.subc(val, carry);
             }
@@ -767,7 +941,7 @@ impl Cpu {
                 self.a = self.and(val);
             }
             0xa6 => {
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.a = self.and(val);
             }
             0xa7 => {
@@ -799,7 +973,7 @@ impl Cpu {
                 self.a = self.xor(val);
             }
             0xae => {
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.a = self.xor(val);
             }
             0xaf => {
@@ -831,7 +1005,7 @@ impl Cpu {
                 self.a = self.or(val);
             }
             0xb6 => {
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.a = self.or(val);
             }
             0xb7 => {
@@ -863,7 +1037,7 @@ impl Cpu {
                 self.subc(val, false);
             }
             0xbe => {
-                let val = interconnect.read_byte(self.hl());
+                let val = read_u8!(bus, self.hl());
                 self.subc(val, false);
             }
             0xbf => {
@@ -872,81 +1046,86 @@ impl Cpu {
             }
             0xc0 => {
                 // RET NZ - return if NZ
+                bus.step(CYCLES_PER_STEP);
                 if !self.f.z {
-                    self.ret(interconnect);
+                    ret!(self, bus);
                     cycle_count += 12;
                 }
             }
             0xc1 => {
                 // POP BC
-                let c = self.pop_byte(interconnect);
-                let b = self.pop_byte(interconnect);
+                let c = pop_u8!(self, bus);
+                let b = pop_u8!(self, bus);
 
                 self.b = b;
                 self.c = c;
             }
             0xc2 => {
                 // JP NZ, nn - Jump to address nn if NZ
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 if !self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    bus.step(CYCLES_PER_STEP);
                     cycle_count += 4;
                 }
             }
             0xc3 => {
                 // JP nn - Jump to address nn
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 self.pc = ((msb as u16) << 8) | lsb as u16;
+                bus.step(CYCLES_PER_STEP);
             }
             0xc4 => {
                 // CALL NZ, nn
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
                 if !self.f.z {
-                    self.call(interconnect, addr);
+                    call!(self, bus, addr);
                     cycle_count += 12;
                 }
             }
             0xc5 => {
                 // PUSH BC
-                let halfword = self.bc();
-                self.push_halfword(interconnect, halfword);
+                let val = self.bc();
+                push_u16!(self, bus, val);
             }
             0xc6 => {
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 self.a = self.addc(n, false);
             }
             0xc7 => {
-                self.call(interconnect, 0x0000);
+                call!(self, bus, 0x0000);
             }
             0xc8 => {
                 // RET Z - return if Z flag is set
+                bus.step(CYCLES_PER_STEP);
                 if self.f.z {
-                    self.ret(interconnect);
+                    ret!(self, bus);
                     cycle_count += 12;
                 }
             }
             0xc9 => {
                 // RET - pop return address and jump there
-                self.ret(interconnect);
+                ret!(self, bus);
             }
             0xca => {
                 // JP Z, nn - Jump to address nn if Z
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 if self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
+                    bus.step(CYCLES_PER_STEP);
                     cycle_count += 4;
                 }
             }
             0xcb => {
                 // Extended instructions
-                let sub_instr = self.read_pc_byte(interconnect);
+                let sub_instr = read_pc_u8!(self, bus);
                 match sub_instr {
                     0x00 => {
                         let val = self.b;
@@ -973,8 +1152,9 @@ impl Cpu {
                         self.l = self.rlc(val);
                     }
                     0x06 => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.rlc(val));
+                        // RLC (HL)
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.rlc(val));
                     }
                     0x07 => {
                         let val = self.a;
@@ -1005,8 +1185,8 @@ impl Cpu {
                         self.l = self.rrc(val);
                     }
                     0x0e => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.rrc(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.rrc(val));
                     }
                     0x0f => {
                         let val = self.a;
@@ -1037,8 +1217,8 @@ impl Cpu {
                         self.l = self.rl(val);
                     }
                     0x16 => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.rl(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.rl(val));
                     }
                     0x17 => {
                         let val = self.a;
@@ -1069,8 +1249,8 @@ impl Cpu {
                         self.l = self.rr(val);
                     }
                     0x1e => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.rr(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.rr(val));
                     }
                     0x1f => {
                         let val = self.a;
@@ -1101,8 +1281,8 @@ impl Cpu {
                         self.l = self.sla(val);
                     }
                     0x26 => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.sla(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.sla(val));
                     }
                     0x27 => {
                         let val = self.a;
@@ -1133,8 +1313,8 @@ impl Cpu {
                         self.l = self.sra(val);
                     }
                     0x2e => {
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.sra(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.sra(val));
                     }
                     0x2f => {
                         let val = self.a;
@@ -1172,9 +1352,9 @@ impl Cpu {
                     }
                     0x36 => {
                         // SWAP (HL)
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         let res = self.swap(val);
-                        interconnect.write_byte(self.hl(), res);
+                        write_u8!(bus, self.hl(), res);
                     }
                     0x37 => {
                         // SWAP A
@@ -1213,8 +1393,8 @@ impl Cpu {
                     }
                     0x3e => {
                         // SRL (HL)
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.srl(val));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.srl(val));
                     }
                     0x3f => {
                         // SRL A
@@ -1253,7 +1433,7 @@ impl Cpu {
                     }
                     0x46 => {
                         // BIT (HL), 0
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 0);
                     }
                     0x47 => {
@@ -1293,7 +1473,7 @@ impl Cpu {
                     }
                     0x4e => {
                         // BIT (HL), 1
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 1);
                     }
                     0x4f => {
@@ -1333,7 +1513,7 @@ impl Cpu {
                     }
                     0x56 => {
                         // BIT (HL), 2
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 2);
                     }
                     0x57 => {
@@ -1373,7 +1553,7 @@ impl Cpu {
                     }
                     0x5e => {
                         // BIT (HL), 3
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 3);
                     }
                     0x5f => {
@@ -1413,7 +1593,7 @@ impl Cpu {
                     }
                     0x66 => {
                         // BIT (HL), 4
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 4);
                     }
                     0x67 => {
@@ -1453,7 +1633,7 @@ impl Cpu {
                     }
                     0x6e => {
                         // BIT (HL), 5
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 5);
                     }
                     0x6f => {
@@ -1493,7 +1673,7 @@ impl Cpu {
                     }
                     0x76 => {
                         // BIT (HL), 6
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 6);
                     }
                     0x77 => {
@@ -1533,7 +1713,7 @@ impl Cpu {
                     }
                     0x7e => {
                         // BIT (HL), 7
-                        let val = interconnect.read_byte(self.hl());
+                        let val = read_u8!(bus, self.hl());
                         self.bit(val, 7);
                     }
                     0x7f => {
@@ -1573,8 +1753,8 @@ impl Cpu {
                     }
                     0x86 => {
                         // RES (HL), 0
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 0));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 0));
                     }
                     0x87 => {
                         // RES A, 0
@@ -1613,8 +1793,8 @@ impl Cpu {
                     }
                     0x8e => {
                         // RES (HL), 1
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 1));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 1));
                     }
                     0x8f => {
                         // RES A, 1
@@ -1653,8 +1833,8 @@ impl Cpu {
                     }
                     0x96 => {
                         // RES (HL), 2
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 2));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 2));
                     }
                     0x97 => {
                         // RES A, 2
@@ -1693,8 +1873,8 @@ impl Cpu {
                     }
                     0x9e => {
                         // RES (HL), 3
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 3));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 3));
                     }
                     0x9f => {
                         // RES A, 3
@@ -1733,8 +1913,8 @@ impl Cpu {
                     }
                     0xa6 => {
                         // RES (HL), 4
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 4));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 4));
                     }
                     0xa7 => {
                         // RES A, 4
@@ -1773,8 +1953,8 @@ impl Cpu {
                     }
                     0xae => {
                         // RES (HL), 5
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 5));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 5));
                     }
                     0xaf => {
                         // RES A, 5
@@ -1813,8 +1993,8 @@ impl Cpu {
                     }
                     0xb6 => {
                         // RES (HL), 6
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 6));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 6));
                     }
                     0xb7 => {
                         // RES A, 6
@@ -1853,8 +2033,8 @@ impl Cpu {
                     }
                     0xbe => {
                         // RES (HL), 7
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.res(val, 7));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.res(val, 7));
                     }
                     0xbf => {
                         // RES A, 7
@@ -1893,8 +2073,8 @@ impl Cpu {
                     }
                     0xc6 => {
                         // SET (HL), 0
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 0));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 0));
                     }
                     0xc7 => {
                         // SET A, 0
@@ -1933,8 +2113,8 @@ impl Cpu {
                     }
                     0xce => {
                         // SET (HL), 1
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 1));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 1));
                     }
                     0xcf => {
                         // SET A, 1
@@ -1973,8 +2153,8 @@ impl Cpu {
                     }
                     0xd6 => {
                         // SET (HL), 2
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 2));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 2));
                     }
                     0xd7 => {
                         // SET A, 2
@@ -2013,8 +2193,8 @@ impl Cpu {
                     }
                     0xde => {
                         // SET (HL), 3
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 3));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 3));
                     }
                     0xdf => {
                         // SET A, 3
@@ -2053,8 +2233,8 @@ impl Cpu {
                     }
                     0xe6 => {
                         // SET (HL), 4
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 4));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 4));
                     }
                     0xe7 => {
                         // SET A, 4
@@ -2093,8 +2273,8 @@ impl Cpu {
                     }
                     0xee => {
                         // SET (HL), 5
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 5));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 5));
                     }
                     0xef => {
                         // SET A, 5
@@ -2133,8 +2313,8 @@ impl Cpu {
                     }
                     0xf6 => {
                         // SET (HL), 6
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 6));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 6));
                     }
                     0xf7 => {
                         // SET A, 6
@@ -2173,8 +2353,8 @@ impl Cpu {
                     }
                     0xfe => {
                         // SET (HL), 7
-                        let val = interconnect.read_byte(self.hl());
-                        interconnect.write_byte(self.hl(), self.set(val, 7));
+                        let val = read_u8!(bus, self.hl());
+                        write_u8!(bus, self.hl(), self.set(val, 7));
                     }
                     0xff => {
                         // SET A, 7
@@ -2187,130 +2367,134 @@ impl Cpu {
             }
             0xcc => {
                 // CALL Z, nn - Call function at nn if zero flag is set
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
                 if self.f.z {
-                    self.call(interconnect, addr);
+                    call!(self, bus, addr);
                     cycle_count += 12;
                 }
             }
             0xcd => {
                 // CALL nn - Call function at nn
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
-                self.call(interconnect, addr);
+                call!(self, bus, addr);
             }
             0xce => {
                 // ADDC A, n
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
                 let carry = self.f.c;
 
                 self.a = self.addc(val, carry);
             }
             0xcf => {
                 // RST 08
-                self.call(interconnect, 0x0008);
+                call!(self, bus, 0x0008);
             }
             0xd0 => {
                 // RET NC
+                bus.step(CYCLES_PER_STEP);
                 if !self.f.c {
-                    self.ret(interconnect);
+                    ret!(self, bus);
                     cycle_count += 12;
                 }
             }
             0xd1 => {
                 // POP DE
-                let e = self.pop_byte(interconnect);
-                let d = self.pop_byte(interconnect);
+                let e = pop_u8!(self, bus);
+                let d = pop_u8!(self, bus);
 
                 self.d = d;
                 self.e = e;
             }
             0xd2 => {
                 // JP NC, nn - Jump to address nn if NC
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 if !self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
                     cycle_count += 4;
+                    bus.step(CYCLES_PER_STEP);
                 }
             }
             0xd4 => {
                 // CALL NC, nn - Call function at nn if carry flag is not set
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
                 if !self.f.c {
-                    self.call(interconnect, addr);
+                    call!(self, bus, addr);
                     cycle_count += 12;
                 }
             }
             0xd5 => {
                 // PUSH DE
                 let halfword = self.de();
-                self.push_halfword(interconnect, halfword);
+                push_u16!(self, bus, halfword);
             }
             0xd6 => {
                 // SUB A, n
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 self.a = self.subc(n, false);
             }
             0xd7 => {
                 // RST 10
-                self.call(interconnect, 0x0010);
+                call!(self, bus, 0x0010);
             }
             0xd8 => {
                 // RET C - return if the C flag is set
+                bus.step(CYCLES_PER_STEP);
                 if self.f.c {
-                    self.ret(interconnect);
+                    ret!(self, bus);
                     cycle_count += 12;
                 }
             }
             0xd9 => {
                 // RETI - return and enable interrupts
-                self.ret(interconnect);
+                ret!(self, bus);
                 self.interrupts_enabled = true;
             }
             0xda => {
                 // JP C, nn - Jump to address nn if C
-                let lsb = self.read_pc_byte(interconnect);
-                let msb = self.read_pc_byte(interconnect);
+                let lsb = read_pc_u8!(self, bus);
+                let msb = read_pc_u8!(self, bus);
 
                 if self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
                     cycle_count += 4;
+                    bus.step(CYCLES_PER_STEP);
                 }
             }
             0xdc => {
                 // CALL C, nn - Call function at nn if carry flag is set
-                let addr = self.read_pc_halfword(interconnect);
+                let addr = self.read_pc_halfword(bus);
 
                 if self.f.c {
-                    self.call(interconnect, addr);
+                    call!(self, bus, addr);
                     cycle_count += 12;
                 }
             }
             0xde => {
                 // SUBC A, n
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 let carry = self.f.c;
                 self.a = self.subc(n, carry);
             }
             0xdf => {
                 // RST 18
-                self.call(interconnect, 0x0018);
+                call!(self, bus, 0x0018);
             }
             0xe0 => {
                 // LDH (n), A - Store A in memory 0xff00+n
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 let addr = 0xff00 + (n as u16);
 
-                interconnect.write_byte(addr, self.a);
+                write_u8!(bus, addr, self.a);
             }
             0xe1 => {
                 // POP HL
-                let l = self.pop_byte(interconnect);
-                let h = self.pop_byte(interconnect);
+                let l = pop_u8!(self, bus);
+                let h = pop_u8!(self, bus);
 
                 self.h = h;
                 self.l = l;
@@ -2318,30 +2502,28 @@ impl Cpu {
             0xe2 => {
                 // LD (C), A
                 let addr = 0xff00 + (self.c as u16);
-                interconnect.write_byte(addr, self.a);
+                write_u8!(bus, addr, self.a);
             }
             0xe5 => {
                 // PUSH HL
-                let h = self.h;
-                let l = self.l;
-
-                self.push_byte(interconnect, h);
-                self.push_byte(interconnect, l);
+                push_u16!(self, bus, self.hl());
             }
             0xe6 => {
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
                 self.a = self.and(val);
             }
             0xe7 => {
                 // RST 20
-                self.call(interconnect, 0x0020);
+                call!(self, bus, 0x0020);
             }
             0xe8 => {
                 // ADD SP, n - Add 8 bit immediate to SP
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
                 let sp = self.sp;
 
                 let res = sp.wrapping_add(n);
+                bus.step(CYCLES_PER_STEP);
+                bus.step(CYCLES_PER_STEP);
 
                 self.sp = res;
                 self.f.z = false;
@@ -2355,35 +2537,39 @@ impl Cpu {
             }
             0xea => {
                 // LD nn, A - Store A to immediate address
-                let addr = self.read_pc_halfword(interconnect);
-                interconnect.write_byte(addr, self.a);
+                let addr = self.read_pc_halfword(bus);
+                write_u8!(bus, addr, self.a);
             }
-            0xed => {},
+            0xed => {
+                // This instruction is used to signal a test has finished in the
+                // mooneye suite
+                bus.events.push(Event::Unrecognized0xed);
+            },
             0xee => {
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
                 self.a = self.xor(val);
             }
             0xef => {
                 // RST 28
-                self.call(interconnect, 0x0028);
+                call!(self, bus, 0x0028);
             }
             0xf0 => {
-                let n = self.read_pc_byte(interconnect);
+                let n = read_pc_u8!(self, bus);
                 let addr = 0xff00 + (n as u16);
 
-                self.a = interconnect.read_byte(addr);
+                self.a = read_u8!(bus, addr);
             }
             0xf1 => {
                 // POP AF
-                let f = self.pop_byte(interconnect);
-                let a = self.pop_byte(interconnect);
+                let f = pop_u8!(self, bus);
+                let a = pop_u8!(self, bus);
 
                 self.a = a;
                 self.f = f.into();
             }
             0xf2 => {
                 let addr = 0xff00 + (self.c as u16);
-                self.a = interconnect.read_byte(addr);
+                self.a = read_u8!(bus, addr);
             }
             0xf3 => {
                 // DI -Disable interrupts after the next instruction is executed
@@ -2391,24 +2577,21 @@ impl Cpu {
             }
             0xf5 => {
                 // PUSH AF
-                let a = self.a;
-                let f = self.f;
-
-                self.push_byte(interconnect, a);
-                self.push_byte(interconnect, f.into());
+                push_u16!(self, bus, self.af());
             }
             0xf6 => {
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
                 self.a = self.or(val);
             }
             0xf7 => {
                 // RST 30
-                self.call(interconnect, 0x0030);
+                call!(self, bus, 0x0030);
             }
             0xf8 => {
                 // LD HL, SP+n
-                let n = self.read_pc_byte(interconnect) as i8 as u16;
+                let n = read_pc_u8!(self, bus) as i8 as u16;
                 let addr = self.sp.wrapping_add(n);
+                bus.step(CYCLES_PER_STEP);
 
                 self.f.z = false;
                 self.f.n = false;
@@ -2418,22 +2601,26 @@ impl Cpu {
                 self.h = (addr >> 8) as u8;
                 self.l = (addr & 0xff) as u8;
             }
-            0xf9 => self.sp = self.hl(), // LD SP, HL
+            0xf9 => {
+                // LD SP, HL
+                self.sp = self.hl();
+                bus.step(CYCLES_PER_STEP);
+            }
             0xfa => {
-                let addr = self.read_pc_halfword(interconnect);
-                self.a = interconnect.read_byte(addr);
+                let addr = self.read_pc_halfword(bus);
+                self.a = read_u8!(bus, addr);
             }
             0xfb => {
                 // EI
                 self.interrupts_enabled = true;
             }
             0xfe => {
-                let val = self.read_pc_byte(interconnect);
+                let val = read_pc_u8!(self, bus);
                 self.subc(val, false);
             }
             0xff => {
                 // RST 38
-                self.call(interconnect, 0x0038);
+                call!(self, bus, 0x0038);
             }
             _ => panic!("Unrecognized instruction {:02x} at {:04x}", instr, old_pc),
         }
@@ -2449,19 +2636,9 @@ impl Cpu {
         cycle_count
     }
 
-    fn read_pc_byte(&mut self, interconnect: &Interconnect) -> u8 {
-        let val = interconnect.read_byte(self.pc);
-        if self.halted == -1 {
-            self.halted = 0;
-        } else {
-            self.pc += 1;
-        }
-        val
-    }
-
-    fn read_pc_halfword(&mut self, interconnect: &Interconnect) -> u16 {
-        let lsb = self.read_pc_byte(interconnect);
-        let msb = self.read_pc_byte(interconnect);
+    fn read_pc_halfword(&mut self, bus: &mut Bus) -> u16 {
+        let lsb = read_pc_u8!(self, bus);
+        let msb = read_pc_u8!(self, bus);
 
         ((msb as u16) << 8) | (lsb as u16)
     }
@@ -2470,7 +2647,7 @@ impl Cpu {
         self.interrupts_enabled = false;
     }
 
-    fn handle_interrupt(&mut self, interconnect: &mut Interconnect, int_f: u8, int_e: u8) {
+    fn handle_interrupt(&mut self, bus: &mut Bus, int_f: u8, int_e: u8) {
         let interrupt_vector = int_f & int_e;
         let interrupt = interrupt_vector.trailing_zeros();
 
@@ -2483,43 +2660,10 @@ impl Cpu {
             _ => unreachable!(),
         };
 
-        interconnect.write_byte(0xff0f, int_f & !(1 << interrupt));
+        bus.interconnect.write_byte(0xff0f, int_f & !(1 << interrupt));
 
-        self.call(interconnect, addr);
+        call!(self, bus, addr);
         self.halted = 0;
-    }
-
-    fn push_halfword(&mut self, interconnect: &mut Interconnect, addr: u16) {
-        self.sp -= 2;
-        interconnect.write_halfword(self.sp, addr);
-    }
-
-    fn push_byte(&mut self, interconnect: &mut Interconnect, val: u8) {
-        self.sp -= 1;
-        interconnect.write_byte(self.sp, val);
-    }
-
-    fn pop_halfword(&mut self, interconnect: &mut Interconnect) -> u16 {
-        let ret = interconnect.read_halfword(self.sp);
-        self.sp += 2;
-        ret
-    }
-
-    fn pop_byte(&mut self, interconnect: &mut Interconnect) -> u8 {
-        let val = interconnect.read_byte(self.sp);
-        self.sp += 1;
-        val
-    }
-
-    fn call(&mut self, interconnect: &mut Interconnect, addr: u16) {
-        let pc = self.pc;
-        self.push_halfword(interconnect, pc);
-        self.pc = addr;
-    }
-
-    fn ret(&mut self, interconnect: &mut Interconnect) {
-        let addr = self.pop_halfword(interconnect);
-        self.pc = addr;
     }
 
     fn addc(&mut self, val: u8, carry: bool) -> u8 {

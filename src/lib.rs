@@ -20,6 +20,7 @@ mod opcodes;
 mod command;
 mod gamepad;
 mod interrupt;
+mod events;
 
 use std::path::Path;
 use self::vm::VM;
