@@ -2,144 +2,19 @@ use interconnect::Interconnect;
 use events::Event;
 use device::Device;
 
+const CYCLES_PER_STEP: u16  = 4;
+
 pub struct Bus<'a, 'b, 'c> {
     pub interconnect: &'a mut Interconnect,
     pub device: &'b mut Device,
     pub events: &'c mut Vec<Event>,
+    pub cycles: u16,
 }
 
 impl<'a, 'b, 'c> Bus<'a, 'b, 'c> {
     fn step(&mut self, cycles: u16) {
         self.interconnect.step(cycles, self.device, self.events);
-    }
-}
-
-const CYCLES_PER_STEP: u16  = 4;
-
-macro_rules! read_u8 {
-    ($b: expr, $a: expr) => {
-        {
-            let val = $b.interconnect.read_byte($a);
-            $b.step(CYCLES_PER_STEP);
-            val
-        }
-    }
-}
-
-macro_rules! read_pc_u8 {
-    ($c: expr, $b: expr) => {
-        {
-            let val = $b.interconnect.read_byte($c.pc);
-            $b.step(CYCLES_PER_STEP);
-
-            if $c.halted == -1 {
-                $c.halted = 0;
-            } else {
-                $c.pc += 1;
-            }
-            val
-        }
-    }
-}
-
-macro_rules! write_u8 {
-    ( $b: expr, $a: expr, $v: expr) => {
-        {
-            $b.interconnect.write_byte($a, $v);
-            $b.step(CYCLES_PER_STEP);
-        }
-    }
-}
-
-macro_rules! write_u16 {
-    ($b: expr, $a: expr, $v: expr) => {
-        {
-            let msb = ($v >> 8) as u8;
-            let lsb = ($v & 0xff) as u8;
-
-            write_u8!($b, $a + 1, msb);
-            write_u8!($b, $a, lsb);
-        }
-    }
-}
-
-macro_rules! push_u8 {
-    ($c: expr, $b: expr, $v: expr) => {
-        {
-            $c.sp -= 1;
-            write_u8!($b, $c.sp, $v);
-        }
-    }
-}
-
-macro_rules! push_u16 {
-    ($c: expr, $b: expr, $v: expr) => {
-        {
-            let msb = ($v >> 8) as u8;
-            let lsb = ($v & 0xff) as u8;
-            $b.step(CYCLES_PER_STEP); // Internal delay
-            push_u8!($c, $b, msb);
-            push_u8!($c, $b, lsb);
-        }
-    }
-}
-
-macro_rules! pop_u8 {
-    ($c: expr, $b: expr) => {
-        {
-            let val = read_u8!($b, $c.sp);
-            $c.sp += 1;
-            val
-        }
-    }
-}
-
-macro_rules! pop_u16 {
-    ($c: expr, $b: expr) => {
-        {
-            let lsb = pop_u8!($c, $b) as u16;
-            let msb = pop_u8!($c, $b) as u16;
-
-            (msb << 8) | lsb
-        }
-    }
-}
-
-macro_rules! call {
-    ($c: expr, $b: expr, $a: expr) => {
-        {
-            let pc = $c.pc;
-            push_u16!($c, $b, pc);
-            $c.pc = $a;
-        }
-    }
-}
-
-macro_rules! ret {
-    ($c: expr, $b: expr) => {
-        {
-            let addr = pop_u16!($c, $b);
-            $b.step(CYCLES_PER_STEP); // Internal delay
-            $c.pc = addr;
-        }
-    }
-}
-
-macro_rules! rr {
-    ($c: expr, $b: expr, $v: expr) => {
-        {
-            let carry = if $c.f.c { 1 } else { 0 };
-            let ret = ($v >> 1) | (carry << 7);
-
-            $c.f.z = ret == 0;
-            $c.f.n = false;
-            $c.f.h = false;
-            $c.f.c = ($v & 0x01) != 0;
-
-            $b.interconnect.step(CYCLES_PER_STEP, $b.device, $b.events);
-
-            ret
-        }
+        self.cycles += cycles;
     }
 }
 
@@ -198,62 +73,18 @@ pub struct Cpu {
     pub interrupts_enabled: bool,
 
     pub halted: i8,
-
-    pub total_cycles: u32,
 }
-
-#[cfg_attr(rustfmt, rustfmt_skip)]
-static CYCLE_COUNTS: [u16; 256] = [
-     4, 12,  8,  8,  4,  4,  8,  4, 20,  8,  8,  8,  4,  4,  8,  4,
-     0, 12,  8,  8,  4,  4,  8,  4, 12,  8,  8,  8,  4,  4,  8,  4,
-     8, 12,  8,  8,  4,  4,  8,  4,  8,  8,  8,  8,  4,  4,  8,  4,
-     8, 12,  8,  8, 12, 12, 12,  4,  8,  8,  8,  8,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     8,  8,  8,  8,  8,  8,  4,  8,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     4,  4,  4,  4,  4,  4,  8,  4,  4,  4,  4,  4,  4,  4,  8,  4,
-     8, 12, 12, 16, 12, 16,  8, 16,  8, 16, 12,  0, 12, 24,  8, 16,
-     8, 12, 12,  0, 12, 16,  8, 16,  8, 16, 12,  0, 12,  0,  8, 16,
-    12, 12,  8,  0,  0, 16,  8, 16, 16,  4, 16,  0,  0,  4,  8, 16,
-    12, 12,  8,  4,  0, 16,  8, 16, 12,  8, 16,  4,  0,  0,  8, 16
-];
-
-#[cfg_attr(rustfmt, rustfmt_skip)]
-static CB_CYCLE_COUNTS: [u16; 256] = [
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 12,  8,  8,  8,  8,  8,  8,  8, 12,  8,
-     8,  8,  8,  8,  8,  8, 12,  8,  8,  8,  8,  8,  8,  8, 12,  8,
-     8,  8,  8,  8,  8,  8, 12,  8,  8,  8,  8,  8,  8,  8, 12,  8,
-     8,  8,  8,  8,  8,  8, 12,  8,  8,  8,  8,  8,  8,  8, 12,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8,
-     8,  8,  8,  8,  8,  8, 16,  8,  8,  8,  8,  8,  8,  8, 16,  8
-];
 
 impl Cpu {
     pub fn new() -> Cpu {
-        let f = Flags {
-            z: false,
-            n: false,
-            h: false,
-            c: false,
-        };
-
         Cpu {
             a: 0,
-            f: f,
+            f: Flags {
+                z: false,
+                n: false,
+                h: false,
+                c: false,
+            },
             b: 0,
             c: 0,
             d: 0,
@@ -268,20 +99,18 @@ impl Cpu {
             interrupts_enabled: true,
 
             halted: 0,
-
-            total_cycles: 0,
         }
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, cyclomatic_complexity))]
-    pub fn step(&mut self, bus: Bus) -> u16 {
+    pub fn step(&mut self, bus: &mut Bus) {
         let mut bus = bus;
-        let cycles = self.inner_step(&mut bus);
+        let cycles = self.inner_step(bus);
 
         cycles
     }
 
-    pub fn inner_step(&mut self, bus: &mut Bus) -> u16 {
+    pub fn inner_step(&mut self, bus: &mut Bus) {
         let interrupt_flags = bus.interconnect.read_byte(0xff0f);
         let interrupt_enable = bus.interconnect.read_byte(0xffff);
         let interrupt_request = interrupt_flags & interrupt_enable;
@@ -289,33 +118,27 @@ impl Cpu {
         if self.halted == 1 && interrupt_request == 0 {
             // Step forward one NOP
             bus.step(CYCLES_PER_STEP);
-            return 4;
+            return;
         }
 
         if self.halted == 1 && !self.interrupts_enabled {
             self.halted = 0;
         }
 
-        let mut cycle_count = 0;
 
         if self.interrupts_enabled && (interrupt_request != 0) {
             self.handle_interrupt(bus, interrupt_flags, interrupt_enable);
-            cycle_count += 12;
         }
 
         let old_pc = self.pc;
         let instr = read_pc_u8!(self, bus);
-        cycle_count += CYCLE_COUNTS[instr as usize];
 
         match instr {
-            0x00 => {} // NOP - No Operation
+            0x00 => nop!(), // NOP - No Operation
             0x01 => {
                 // LD BC, nn
-                let lsb = read_pc_u8!(self, bus);
-                let msb = read_pc_u8!(self, bus);
-
-                self.b = msb;
-                self.c = lsb;
+                let bc = read_pc_u16!(self, bus);
+                self.set_bc(bc);
             }
             0x02 => write_u8!(bus, self.bc(), self.a), // LD (BC), A
             0x03 => {
@@ -325,10 +148,13 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
             }
             0x04 => {
-                let val = self.b;
-                self.b = self.inc(val);
+                // INC B
+                // let val = self.b;
+                // self.b = self.inc(val);
+                self.b = inc!(self, self.b);
             }
             0x05 => {
+                // DEC B
                 let val = self.b;
                 self.b = self.dec(val);
             }
@@ -340,7 +166,7 @@ impl Cpu {
             }
             0x08 => {
                 // LD (nn), SP
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 write_u16!(bus, addr, self.sp);
             }
@@ -449,7 +275,6 @@ impl Cpu {
                 if !self.f.z {
                     self.pc = self.pc.wrapping_add(n);
                     bus.interconnect.step(CYCLES_PER_STEP, bus.device, bus.events);
-                    cycle_count += 4;
                 }
             }
             0x21 => {
@@ -519,7 +344,6 @@ impl Cpu {
                 if self.f.z {
                     self.pc = self.pc.wrapping_add(n);
                     bus.step(CYCLES_PER_STEP);
-                    cycle_count += 4;
                 }
             }
             0x29 => {
@@ -566,7 +390,6 @@ impl Cpu {
                 if !self.f.c {
                     self.pc = self.pc.wrapping_add(n);
                     bus.step(CYCLES_PER_STEP);
-                    cycle_count += 4;
                 }
             }
             0x31 => {
@@ -621,7 +444,6 @@ impl Cpu {
                 if self.f.c {
                     self.pc = self.pc.wrapping_add(n);
                     bus.step(CYCLES_PER_STEP);
-                    cycle_count += 4;
                 }
             }
             0x39 => {
@@ -1049,7 +871,6 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
                 if !self.f.z {
                     ret!(self, bus);
-                    cycle_count += 12;
                 }
             }
             0xc1 => {
@@ -1068,7 +889,6 @@ impl Cpu {
                 if !self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
                     bus.step(CYCLES_PER_STEP);
-                    cycle_count += 4;
                 }
             }
             0xc3 => {
@@ -1081,11 +901,10 @@ impl Cpu {
             }
             0xc4 => {
                 // CALL NZ, nn
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 if !self.f.z {
                     call!(self, bus, addr);
-                    cycle_count += 12;
                 }
             }
             0xc5 => {
@@ -1105,7 +924,6 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
                 if self.f.z {
                     ret!(self, bus);
-                    cycle_count += 12;
                 }
             }
             0xc9 => {
@@ -1120,7 +938,6 @@ impl Cpu {
                 if self.f.z {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
                     bus.step(CYCLES_PER_STEP);
-                    cycle_count += 4;
                 }
             }
             0xcb => {
@@ -2363,20 +2180,18 @@ impl Cpu {
                     }
                     _ => panic!("Unrecognized extended instruction {:02x}", sub_instr),
                 }
-                cycle_count += CB_CYCLE_COUNTS[sub_instr as usize];
             }
             0xcc => {
                 // CALL Z, nn - Call function at nn if zero flag is set
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 if self.f.z {
                     call!(self, bus, addr);
-                    cycle_count += 12;
                 }
             }
             0xcd => {
                 // CALL nn - Call function at nn
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 call!(self, bus, addr);
             }
@@ -2396,7 +2211,6 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
                 if !self.f.c {
                     ret!(self, bus);
-                    cycle_count += 12;
                 }
             }
             0xd1 => {
@@ -2414,17 +2228,15 @@ impl Cpu {
 
                 if !self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
-                    cycle_count += 4;
                     bus.step(CYCLES_PER_STEP);
                 }
             }
             0xd4 => {
                 // CALL NC, nn - Call function at nn if carry flag is not set
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 if !self.f.c {
                     call!(self, bus, addr);
-                    cycle_count += 12;
                 }
             }
             0xd5 => {
@@ -2446,7 +2258,6 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
                 if self.f.c {
                     ret!(self, bus);
-                    cycle_count += 12;
                 }
             }
             0xd9 => {
@@ -2461,17 +2272,15 @@ impl Cpu {
 
                 if self.f.c {
                     self.pc = ((msb as u16) << 8) | lsb as u16;
-                    cycle_count += 4;
                     bus.step(CYCLES_PER_STEP);
                 }
             }
             0xdc => {
                 // CALL C, nn - Call function at nn if carry flag is set
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
 
                 if self.f.c {
                     call!(self, bus, addr);
-                    cycle_count += 12;
                 }
             }
             0xde => {
@@ -2537,7 +2346,7 @@ impl Cpu {
             }
             0xea => {
                 // LD nn, A - Store A to immediate address
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
                 write_u8!(bus, addr, self.a);
             }
             0xed => {
@@ -2607,7 +2416,7 @@ impl Cpu {
                 bus.step(CYCLES_PER_STEP);
             }
             0xfa => {
-                let addr = self.read_pc_halfword(bus);
+                let addr = read_pc_u16!(self, bus);
                 self.a = read_u8!(bus, addr);
             }
             0xfb => {
@@ -2631,16 +2440,6 @@ impl Cpu {
                 self.disable_interrupts();
             }
         }
-
-        self.total_cycles += cycle_count as u32;
-        cycle_count
-    }
-
-    fn read_pc_halfword(&mut self, bus: &mut Bus) -> u16 {
-        let lsb = read_pc_u8!(self, bus);
-        let msb = read_pc_u8!(self, bus);
-
-        ((msb as u16) << 8) | (lsb as u16)
     }
 
     fn disable_interrupts(&mut self) {

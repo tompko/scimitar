@@ -36,6 +36,8 @@ pub struct VM {
     stdin_receiver: Receiver<String>,
 
     symbols: Symbols,
+
+    total_cycles: u64,
 }
 
 impl VM {
@@ -69,6 +71,8 @@ impl VM {
             stdin_receiver: stdin_receiver,
 
             symbols: symbols,
+
+            total_cycles: 0,
         };
         if vm.mode == Mode::Debugging {
             vm.disassemble_instruction();
@@ -79,20 +83,22 @@ impl VM {
 
     pub fn step(&mut self, device: &mut Device) -> (u16, bool) {
         let mut events = Vec::new();
-        let cycles = self.cpu.step(
-            Bus{
-                interconnect: &mut self.inter,
-                device: device,
-                events: &mut events,
-            }
-        );
+        let mut bus = Bus{
+            interconnect: &mut self.inter,
+            device: device,
+            events: &mut events,
+            cycles: 0,
+        };
+        self.cpu.step(&mut bus);
 
         let breakpoint = self.breakpoints.contains(&self.cpu.pc) || self.temp_breakpoints.contains(&self.cpu.pc);
-        let watchpoint = events.iter().any(|x| *x == Event::Watchpoint);
+        let watchpoint = bus.events.iter().any(|x| *x == Event::Watchpoint);
 
         self.temp_breakpoints.remove(&self.cpu.pc);
 
-        (cycles, breakpoint || watchpoint)
+        self.total_cycles += bus.cycles as u64;
+
+        (bus.cycles, breakpoint || watchpoint)
     }
 
     pub fn run(&mut self, device: &mut Device) {
@@ -172,7 +178,7 @@ impl VM {
                     println!("SP: {:04x}", self.cpu.sp);
                 }
                 Ok(Command::ShowIORegs) => {
-                    println!("Total Cycles: {}", self.cpu.total_cycles);
+                    println!("Total Cycles: {}", self.total_cycles);
                     // TODO - more complete list
                     let timer = &self.inter.get_timer();
                     println!("Timer:");
@@ -180,6 +186,8 @@ impl VM {
                              timer.divider, timer.timer_counter, timer.timer_modulo, timer.timer_control());
                     println!("Interrupts:");
                     println!("IE: {:02x}, IF: {:02x}", self.inter.ie_register, self.inter.if_register);
+                    println!("OAM DMA");
+                    println!("Source: {:04x}, State: {:?}, Slot: {:02x}", self.inter.dma_source, self.inter.dma_state, self.inter.dma_slot);
                 }
                 Ok(Command::Step(count)) => {
                     for _ in 0..count {
