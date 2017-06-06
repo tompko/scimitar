@@ -78,13 +78,24 @@ impl Interconnect {
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn read_byte(&self, addr: u16) -> u8 {
         if self.dma_state != DmaState::Inactive {
-            match addr {
-                HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
-                _ => 0xff,
-            }
-        } else {
-            self.inner_read_byte(addr)
+            let ext_bus_1 = |x| x < 0x8000;
+            let vram_bus = |x| (x >= 0x8000) && (x < 0xa000);
+            let ext_bus_2 = |x| (x >= 0xa000) && (x < 0xfe00);
+
+            let dma_source = self.dma_source + match self.dma_state {
+                DmaState::Setup => 0,
+                DmaState::Active(index) => index + 1,
+                _ => unreachable!(),
+            };
+
+            if (ext_bus_1(addr) && ext_bus_1(dma_source)) ||
+               (vram_bus(addr) && vram_bus(dma_source)) ||
+               (ext_bus_2(addr) && ext_bus_2(dma_source)) {
+                   return self.dma_slot;
+               }
         }
+
+        self.inner_read_byte(addr)
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
@@ -104,7 +115,7 @@ impl Interconnect {
                 self.internal_ram.write_byte(addr - IRAM_ECHO_START, val)
             }
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
-            OAM_START...OAM_END => self.gpu.write_oam(addr - OAM_START, val),
+            OAM_START...OAM_END => if self.dma_state != DmaState::Inactive {} else { self.gpu.write_oam(addr - OAM_START, val)},
             0xff00 => self.gamepad.write_reg(val),
 
             // TODO - implement serial port (Link cable)
@@ -135,12 +146,12 @@ impl Interconnect {
                 }
                 DmaState::Active(index) => {
                     let val = self.dma_slot;
-                    self.write_byte(OAM_START + index, val);
                     self.dma_slot = self.inner_read_byte(self.dma_source + index + 1);
 
                     if index >= 160 {
                         self.dma_state = DmaState::Inactive;
                     } else {
+                        self.gpu.write_oam(index, val);
                         self.dma_state = DmaState::Active(index + 1);
                     }
                 }
@@ -184,7 +195,7 @@ impl Interconnect {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
-            OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            OAM_START...OAM_END => if self.dma_state != DmaState::Inactive { 0xff } else { self.gpu.read_oam(addr - OAM_START) },
             0xff00 => self.gamepad.read_reg(),
 
             // TODO - implement serial port (Link cable)

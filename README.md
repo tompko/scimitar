@@ -21,7 +21,7 @@ Tested using master at f72ba415e1.
 
 | Test                    | Result |
 | ----------------------- | -------|
-| add sp e timing         | :x:    |
+| add sp e timing         | :+1:   |
 | boot hwio dmg0          | :x:    |
 | boot hwio dmgABCXmgb    | :x:    |
 | boot hwio S             | :x:    |
@@ -48,7 +48,7 @@ Tested using master at f72ba415e1.
 | ld hl sp e timing       | :x:    |
 | oam dma restart         | :x:    |
 | oam dma start           | :x:    |
-| oam dma timing          | :x:    |
+| oam dma timing          | :+1:   |
 | pop timing              | :x:    |
 | push timing             | :x:    |
 | rapid di ei             | :x:    |

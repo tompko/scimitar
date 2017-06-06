@@ -5,7 +5,6 @@ mod common;
 use self::gameboy::config::model::Model;
 
 #[test]
-#[ignore]
 fn add_sp_e_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/add_sp_e_timing.gb",
