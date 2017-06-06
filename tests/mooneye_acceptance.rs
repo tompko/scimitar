@@ -229,7 +229,6 @@ fn oam_dma_start() {
 }
 
 #[test]
-#[ignore]
 fn oam_dma_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/oam_dma_timing.gb",

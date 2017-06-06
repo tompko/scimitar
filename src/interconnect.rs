@@ -12,6 +12,13 @@ use gamepad::Gamepad;
 use interrupt::Irq;
 use events::Event;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DmaState {
+    Inactive,
+    Setup,
+    Active(u16),
+}
+
 pub struct Interconnect {
     boot_rom: Bootrom,
     cartridge: Cartridge,
@@ -33,9 +40,9 @@ pub struct Interconnect {
     trigger_watchpoint: bool,
     pub watchpoints: HashSet<u16>,
 
-    dma_source: u16,
-    dma_index: u16,
-    dma_active: bool,
+    pub dma_source: u16,
+    pub dma_slot: u8,
+    pub dma_state: DmaState,
 }
 
 impl Interconnect {
@@ -63,38 +70,20 @@ impl Interconnect {
             trigger_watchpoint: false,
 
             dma_source: 0,
-            dma_index: 0,
-            dma_active: false,
+            dma_slot: 0,
+            dma_state: DmaState::Inactive,
         }
     }
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn read_byte(&self, addr: u16) -> u8 {
-        match addr {
-            BOOT_ROM_START...BOOT_ROM_END if self.boot_rom_active => self.boot_rom.read_byte(addr - BOOT_ROM_START),
-            ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
-            VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
-            CRAM_START...CRAM_END => self.cartridge.read_byte(addr - ROM_START),
-            INTERNAL_RAM_START...INTERNAL_RAM_END => {
-                self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
+        if self.dma_state != DmaState::Inactive {
+            match addr {
+                HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
+                _ => 0xff,
             }
-            IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
-            OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
-            0xff00 => self.gamepad.read_reg(),
-
-            // TODO - implement serial port (Link cable)
-            0xff01 => 0x00,
-            0xff02 => 0x7e,
-
-            0xff04...0xff07 => self.timer.read_reg(addr),
-            0xff0f => self.if_register,
-            0xff10...0xff3f => self.apu.read_reg(addr),
-            0xff40...0xff4f => self.gpu.read_reg(addr),
-            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
-            0xffff => self.ie_register,
-
-            // Unused addresses return 0xff for reads
-            _ => 0xff,
+        } else {
+            self.inner_read_byte(addr)
         }
     }
 
@@ -127,8 +116,7 @@ impl Interconnect {
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff46 => {
                 self.dma_source = (val as u16) << 8;
-                self.dma_index = 0;
-                self.dma_active = true;
+                self.dma_state = DmaState::Setup;
             }
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.boot_rom_active = false,
@@ -137,30 +125,25 @@ impl Interconnect {
         }
     }
 
-    pub fn read_halfword(&self, addr: u16) -> u16 {
-        let lsb = self.read_byte(addr);
-        let msb = self.read_byte(addr + 1);
-
-        ((msb as u16) << 8) | (lsb as u16)
-    }
-
-    pub fn write_halfword(&mut self, addr: u16, val: u16) {
-        let lsb = (val & 0xff) as u8;
-        let msb = (val >> 8) as u8;
-
-        self.write_byte(addr, lsb);
-        self.write_byte(addr + 1, msb);
-    }
-
     pub fn step(&mut self, cycles: u16, device: &mut Device, events: &mut Vec<Event>) {
-        if self.dma_active {
-            let index = self.dma_index;
-            let val = self.read_byte(self.dma_source + index);
-            self.write_byte(OAM_START + index, val);
-            self.dma_index += 1;
+        for _ in 0..(cycles / 4) {
+            match self.dma_state {
+                DmaState::Inactive => {}
+                DmaState::Setup => {
+                    self.dma_slot = self.inner_read_byte(self.dma_source);
+                    self.dma_state = DmaState::Active(0);
+                }
+                DmaState::Active(index) => {
+                    let val = self.dma_slot;
+                    self.write_byte(OAM_START + index, val);
+                    self.dma_slot = self.inner_read_byte(self.dma_source + index + 1);
 
-            if self.dma_index >= 160 {
-                self.dma_active = false;
+                    if index >= 160 {
+                        self.dma_state = DmaState::Inactive;
+                    } else {
+                        self.dma_state = DmaState::Active(index + 1);
+                    }
+                }
             }
         }
 
@@ -189,5 +172,34 @@ impl Interconnect {
 
     pub fn get_timer(&self) -> &Timer {
         &self.timer
+    }
+
+    fn inner_read_byte(&self, addr: u16) -> u8 {
+        match addr {
+            BOOT_ROM_START...BOOT_ROM_END if self.boot_rom_active => self.boot_rom.read_byte(addr - BOOT_ROM_START),
+            ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
+            VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
+            CRAM_START...CRAM_END => self.cartridge.read_byte(addr - ROM_START),
+            INTERNAL_RAM_START...INTERNAL_RAM_END => {
+                self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
+            }
+            IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
+            OAM_START...OAM_END => self.gpu.read_oam(addr - OAM_START),
+            0xff00 => self.gamepad.read_reg(),
+
+            // TODO - implement serial port (Link cable)
+            0xff01 => 0x00,
+            0xff02 => 0x7e,
+
+            0xff04...0xff07 => self.timer.read_reg(addr),
+            0xff0f => self.if_register,
+            0xff10...0xff3f => self.apu.read_reg(addr),
+            0xff40...0xff4f => self.gpu.read_reg(addr),
+            HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
+            0xffff => self.ie_register,
+
+            // Unused addresses return 0xff for reads
+            _ => 0xff,
+        }
     }
 }
