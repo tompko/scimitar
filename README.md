@@ -30,10 +30,10 @@ Tested using master at f72ba415e1.
 | boot regs mgb           | :+1:   |
 | boot regs sgb2          | :+1:   |
 | boot regs sgb           | :+1:   |
-| call cc timing2         | :x:    |
-| call cc timing          | :x:    |
-| call timing2            | :x:    |
-| call timing             | :x:    |
+| call cc timing          | :+1:   |
+| call cc timing2         | :+1:   |
+| call timing             | :+1:   |
+| call timing2            | :+1:   |
 | di timing GS            | :x:    |
 | div timing              | :+1:   |
 | ei timing               | :x:    |
@@ -43,20 +43,20 @@ Tested using master at f72ba415e1.
 | halt ime1 timing        | :x:    |
 | if ie registers         | :x:    |
 | intr timing             | :x:    |
-| jp cc timing            | :x:    |
-| jp timing               | :x:    |
-| ld hl sp e timing       | :x:    |
+| jp cc timing            | :+1:   |
+| jp timing               | :+1:   |
+| ld hl sp e timing       | :+1:   |
 | oam dma restart         | :x:    |
 | oam dma start           | :x:    |
 | oam dma timing          | :+1:   |
-| pop timing              | :x:    |
-| push timing             | :x:    |
+| pop timing              | :+1:   |
+| push timing             | :+1:   |
 | rapid di ei             | :x:    |
-| ret cc timing           | :x:    |
+| ret cc timing           | :+1:   |
 | reti intr timing        | :x:    |
-| reti timing             | :x:    |
-| ret timing              | :x:    |
-| rst timing              | :x:    |
+| reti timing             | :+1:   |
+| ret timing              | :+1:   |
+| rst timing              | :+1:   |
 
 ### Mooneye Bits (unusable bits in memory and registers)
 

@@ -83,7 +83,6 @@ fn boot_hwio_s() {
 }
 
 #[test]
-#[ignore]
 fn call_cc_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/call_cc_timing.gb",
@@ -91,7 +90,6 @@ fn call_cc_timing() {
 }
 
 #[test]
-#[ignore]
 fn call_cc_timing2() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/call_cc_timing2.gb",
@@ -99,7 +97,6 @@ fn call_cc_timing2() {
 }
 
 #[test]
-#[ignore]
 fn call_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/call_timing.gb",
@@ -107,7 +104,6 @@ fn call_timing() {
 }
 
 #[test]
-#[ignore]
 fn call_timing2() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/call_timing2.gb",
@@ -188,7 +184,6 @@ fn intr_timing() {
 }
 
 #[test]
-#[ignore]
 fn jp_cc_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/jp_cc_timing.gb",
@@ -196,7 +191,6 @@ fn jp_cc_timing() {
 }
 
 #[test]
-#[ignore]
 fn jp_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/jp_timing.gb",
@@ -204,7 +198,6 @@ fn jp_timing() {
 }
 
 #[test]
-#[ignore]
 fn ld_hl_sp_e_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/ld_hl_sp_e_timing.gb",
@@ -235,7 +228,6 @@ fn oam_dma_timing() {
 }
 
 #[test]
-#[ignore]
 fn pop_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/pop_timing.gb",
@@ -243,7 +235,6 @@ fn pop_timing() {
 }
 
 #[test]
-#[ignore]
 fn push_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/push_timing.gb",
@@ -259,7 +250,6 @@ fn rapid_di_ei() {
 }
 
 #[test]
-#[ignore]
 fn ret_cc_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/ret_cc_timing.gb",
@@ -275,7 +265,6 @@ fn reti_intr_timing() {
 }
 
 #[test]
-#[ignore]
 fn reti_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/reti_timing.gb",
@@ -283,7 +272,6 @@ fn reti_timing() {
 }
 
 #[test]
-#[ignore]
 fn ret_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/ret_timing.gb",
@@ -291,7 +279,6 @@ fn ret_timing() {
 }
 
 #[test]
-#[ignore]
 fn rst_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/rst_timing.gb",
