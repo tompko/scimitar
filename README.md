@@ -8,11 +8,11 @@ A gameboy emulator in Rust.
 
 | Test         | Result|
 |--------------|-------|
-| cpu_instr    | :+1:  |
-| dmg_sound_2  | :x:   |
-| instr_timing | :+1:  |
-| mem_timing_2 | :x:   |
-| oam_bug_2    | :x:   |
+| cpu instr    | :+1:  |
+| dmg sound 2  | :x:   |
+| instr timing | :+1:  |
+| mem timing 2 | :+1:  |
+| oam bug 2    | :x:   |
 
 ## Mooneye
 Tested using master at f72ba415e1.
