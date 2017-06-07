@@ -2459,6 +2459,8 @@ impl Cpu {
 
         bus.interconnect.write_byte(0xff0f, int_f & !(1 << interrupt));
 
+        self.interrupt_state = InterruptState::Disabled;
+
         call!(self, bus, addr);
         self.halted = 0;
     }
