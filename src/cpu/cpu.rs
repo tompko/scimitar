@@ -2387,7 +2387,6 @@ impl Cpu {
             }
             0xf3 => {
                 // DI
-                println!("Disable interrupts");
                 self.interrupt_state = InterruptState::Disabled;
             }
             0xf5 => {
@@ -2428,7 +2427,6 @@ impl Cpu {
             0xfb => {
                 // EI
                 self.interrupt_state = InterruptState::PendingEI;
-                println!("Enable interrupts");
             }
             0xfe => {
                 let val = read_pc_u8!(self, bus);
