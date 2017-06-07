@@ -37,7 +37,7 @@ Tested using master at f72ba415e1.
 | di timing GS            | :x:    |
 | div timing              | :+1:   |
 | ei timing               | :+1:   |
-| halt ime0 ei            | :x:    |
+| halt ime0 ei            | :+1:   |
 | halt ime0 nointr timing | :x:    |
 | halt ime1 timing2 GS    | :x:    |
 | halt ime1 timing        | :+1:   |

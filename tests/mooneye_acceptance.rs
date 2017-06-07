@@ -146,7 +146,6 @@ fn ei_timing() {
 }
 
 #[test]
-#[ignore]
 fn halt_ime0_ei() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/halt_ime0_ei.gb",
