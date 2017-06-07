@@ -117,6 +117,18 @@ fn di_timing_gs() {
         "tests/mooneye/acceptance/di_timing-GS.gb",
         Model::Dmg
     );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/di_timing-GS.gb",
+        Model::Mgb
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/di_timing-GS.gb",
+        Model::Sgb
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/di_timing-GS.gb",
+        Model::Sgb2
+    );
 }
 
 #[test]
@@ -127,7 +139,6 @@ fn div_timing() {
 }
 
 #[test]
-#[ignore]
 fn ei_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/ei_timing.gb",

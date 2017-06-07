@@ -56,6 +56,14 @@ impl From<u8> for Flags {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterruptState {
+    PendingDI,
+    PendingEI,
+    Enabled,
+    Disabled,
+}
+
 pub struct Cpu {
     pub a: u8,
     pub f: Flags,
@@ -69,8 +77,7 @@ pub struct Cpu {
     pub sp: u16,
     pub pc: u16,
 
-    pub instructions_to_di: u8,
-    pub interrupts_enabled: bool,
+    pub interrupt_state: InterruptState,
 
     pub halted: i8,
 }
@@ -95,8 +102,7 @@ impl Cpu {
             sp: 0xfffe,
             pc: 0x100,
 
-            instructions_to_di: 0,
-            interrupts_enabled: true,
+            interrupt_state: InterruptState::Enabled,
 
             halted: 0,
         }
@@ -104,13 +110,6 @@ impl Cpu {
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, cyclomatic_complexity))]
     pub fn step(&mut self, bus: &mut Bus) {
-        let mut bus = bus;
-        let cycles = self.inner_step(bus);
-
-        cycles
-    }
-
-    pub fn inner_step(&mut self, bus: &mut Bus) {
         let interrupt_flags = bus.interconnect.read_byte(0xff0f);
         let interrupt_enable = bus.interconnect.read_byte(0xffff);
         let interrupt_request = interrupt_flags & interrupt_enable;
@@ -121,13 +120,19 @@ impl Cpu {
             return;
         }
 
-        if self.halted == 1 && !self.interrupts_enabled {
+        if self.halted == 1 && !self.interrupts_enabled() {
             self.halted = 0;
         }
 
 
-        if self.interrupts_enabled && (interrupt_request != 0) {
+        if self.interrupts_enabled() && (interrupt_request != 0) {
             self.handle_interrupt(bus, interrupt_flags, interrupt_enable);
+        }
+
+        if self.interrupt_state == InterruptState::PendingEI {
+            self.interrupt_state = InterruptState::Enabled;
+        } else if self.interrupt_state == InterruptState::PendingDI {
+            self.interrupt_state = InterruptState::Disabled;
         }
 
         let old_pc = self.pc;
@@ -543,7 +548,7 @@ impl Cpu {
             0x75 => write_u8!(bus, self.hl(), self.l), // LD (HL), L
             0x76 => {
                 // HALT
-                if !self.interrupts_enabled && interrupt_request != 0 {
+                if !self.interrupts_enabled() && interrupt_request != 0 {
                     self.halted = -1;
                 } else {
                     self.halted = 1;
@@ -2263,7 +2268,7 @@ impl Cpu {
             0xd9 => {
                 // RETI - return and enable interrupts
                 ret!(self, bus);
-                self.interrupts_enabled = true;
+                self.interrupt_state = InterruptState::Enabled;
             }
             0xda => {
                 // JP C, nn - Jump to address nn if C
@@ -2381,8 +2386,9 @@ impl Cpu {
                 self.a = read_u8!(bus, addr);
             }
             0xf3 => {
-                // DI -Disable interrupts after the next instruction is executed
-                self.instructions_to_di = 1;
+                // DI
+                println!("Disable interrupts");
+                self.interrupt_state = InterruptState::Disabled;
             }
             0xf5 => {
                 // PUSH AF
@@ -2421,7 +2427,8 @@ impl Cpu {
             }
             0xfb => {
                 // EI
-                self.interrupts_enabled = true;
+                self.interrupt_state = InterruptState::PendingEI;
+                println!("Enable interrupts");
             }
             0xfe => {
                 let val = read_pc_u8!(self, bus);
@@ -2433,17 +2440,10 @@ impl Cpu {
             }
             _ => panic!("Unrecognized instruction {:02x} at {:04x}", instr, old_pc),
         }
-
-        if self.instructions_to_di > 0 {
-            self.instructions_to_di -= 1;
-            if self.instructions_to_di == 0 {
-                self.disable_interrupts();
-            }
-        }
     }
 
-    fn disable_interrupts(&mut self) {
-        self.interrupts_enabled = false;
+    fn interrupts_enabled(&self) -> bool {
+        self.interrupt_state == InterruptState::Enabled
     }
 
     fn handle_interrupt(&mut self, bus: &mut Bus, int_f: u8, int_e: u8) {
