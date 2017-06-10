@@ -127,6 +127,7 @@ impl Cpu {
 
         if self.interrupts_enabled() && (interrupt_request != 0) {
             self.handle_interrupt(bus, interrupt_flags, interrupt_enable);
+            return;
         }
 
         if self.interrupt_state == InterruptState::PendingEI {
@@ -279,7 +280,7 @@ impl Cpu {
 
                 if !self.f.z {
                     self.pc = self.pc.wrapping_add(n);
-                    bus.interconnect.step(CYCLES_PER_STEP, bus.device, bus.events);
+                    bus.step(CYCLES_PER_STEP);
                 }
             }
             0x21 => {

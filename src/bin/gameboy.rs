@@ -36,6 +36,8 @@ impl Device for ConsoleDevice {
         if self.buffer_set {
             self.window.update_with_buffer(&*self.buffer);
             self.buffer_set = false;
+        } else {
+            self.window.update();
         }
     }
 
