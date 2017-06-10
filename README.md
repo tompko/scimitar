@@ -34,15 +34,15 @@ Tested using master at f72ba415e1.
 | call cc timing2         | :+1:   |
 | call timing             | :+1:   |
 | call timing2            | :+1:   |
-| di timing GS            | :x:    |
+| di timing GS            | :+1:   |
 | div timing              | :+1:   |
 | ei timing               | :+1:   |
 | halt ime0 ei            | :+1:   |
-| halt ime0 nointr timing | :x:    |
-| halt ime1 timing2 GS    | :x:    |
+| halt ime0 nointr timing | :+1:   |
+| halt ime1 timing2 GS    | :+1:   |
 | halt ime1 timing        | :+1:   |
 | if ie registers         | :+1:   |
-| intr timing             | :x:    |
+| intr timing             | :+1:   |
 | jp cc timing            | :+1:   |
 | jp timing               | :+1:   |
 | ld hl sp e timing       | :+1:   |

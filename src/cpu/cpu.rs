@@ -2462,6 +2462,9 @@ impl Cpu {
 
         self.interrupt_state = InterruptState::Disabled;
 
+        // TODO - serving an interrupt takes 5 cycles, two of which must be the push to sp
+        // figure out what the other three are
+        bus.step(CYCLES_PER_STEP * 2); // Internal delay
         call!(self, bus, addr);
         self.halted = 0;
     }

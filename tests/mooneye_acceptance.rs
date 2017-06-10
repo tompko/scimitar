@@ -111,7 +111,6 @@ fn call_timing2() {
 }
 
 #[test]
-#[ignore]
 fn di_timing_gs() {
     common::run_test_till_ed(
         "tests/mooneye/acceptance/di_timing-GS.gb",
@@ -153,7 +152,6 @@ fn halt_ime0_ei() {
 }
 
 #[test]
-#[ignore]
 fn halt_ime0_nointr_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/halt_ime0_nointr_timing.gb",
@@ -168,7 +166,6 @@ fn halt_ime1_timing() {
 }
 
 #[test]
-#[ignore]
 fn halt_ime1_timing2_gs() {
     common::run_test_till_ed(
         "tests/mooneye/acceptance/halt_ime1_timing2-GS.gb",
@@ -196,7 +193,6 @@ fn if_ie_registers() {
 }
 
 #[test]
-#[ignore]
 fn intr_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/intr_timing.gb",
