@@ -47,6 +47,11 @@ fn boot_regs_mgb() {
 #[test]
 #[ignore]
 fn boot_hwio_dmg_abcxmgb() {
+    // Currently fails on DIV register which should have the following value at 0x0100
+    // - DMG/MGB: ABCCh.
+    // - SGB/SGB2: Not tested. Different from DMG (different boot ROM).
+    // - CGB: 1EA0h (GBC game), 267Ch (DMG game, no user interaction during boot).
+    // - AGB/AGS: 1EA4h (GBC game), 2680h (DMG game, no user interaction during boot).
     common::run_test_till_ed(
         "tests/mooneye/acceptance/boot_hwio-dmgABCXmgb.gb",
         Model::Dmg,
