@@ -226,7 +226,6 @@ fn ld_hl_sp_e_timing() {
 }
 
 #[test]
-#[ignore]
 fn oam_dma_restart() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/oam_dma_restart.gb",
@@ -234,7 +233,6 @@ fn oam_dma_restart() {
 }
 
 #[test]
-#[ignore]
 fn oam_dma_start() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/oam_dma_start.gb",

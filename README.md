@@ -46,8 +46,8 @@ Tested using master at f72ba415e1.
 | jp cc timing            | :+1:   |
 | jp timing               | :+1:   |
 | ld hl sp e timing       | :+1:   |
-| oam dma restart         | :x:    |
-| oam dma start           | :x:    |
+| oam dma restart         | :+1:   |
+| oam dma start           | :+1:   |
 | oam dma timing          | :+1:   |
 | pop timing              | :+1:   |
 | push timing             | :+1:   |

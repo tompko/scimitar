@@ -15,7 +15,10 @@ use events::Event;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DmaState {
     Inactive,
-    Setup,
+    Setup1,
+    Setup2,
+    Reset1,
+    Reset2,
     Active(u16),
 }
 
@@ -77,13 +80,16 @@ impl Interconnect {
 
     #[cfg_attr(feature = "cargo-clippy", allow(match_same_arms, match_overlapping_arm))]
     pub fn read_byte(&self, addr: u16) -> u8 {
-        if self.dma_state != DmaState::Inactive {
+        if !(self.dma_state == DmaState::Inactive || self.dma_state == DmaState::Setup1 || self.dma_state == DmaState::Setup2) {
             let ext_bus_1 = |x| x < 0x8000;
             let vram_bus = |x| (x >= 0x8000) && (x < 0xa000);
             let ext_bus_2 = |x| (x >= 0xa000) && (x < 0xfe00);
 
             let dma_source = self.dma_source + match self.dma_state {
-                DmaState::Setup => 0,
+                DmaState::Setup1 => 0,
+                DmaState::Setup2 => 0,
+                DmaState::Reset1 => 0,
+                DmaState::Reset2 => 0,
                 DmaState::Active(index) => index + 1,
                 _ => unreachable!(),
             };
@@ -127,7 +133,11 @@ impl Interconnect {
             0xff10...0xff3f => self.apu.write_reg(addr, val),
             0xff46 => {
                 self.dma_source = (val as u16) << 8;
-                self.dma_state = DmaState::Setup;
+                if self.dma_state != DmaState::Inactive {
+                    self.dma_state = DmaState::Reset1;
+                } else {
+                    self.dma_state = DmaState::Setup1;
+                }
             }
             0xff40...0xff4b => self.gpu.write_reg(addr, val),
             0xff50 => self.boot_rom_active = false,
@@ -140,18 +150,24 @@ impl Interconnect {
         for _ in 0..(cycles / 4) {
             match self.dma_state {
                 DmaState::Inactive => {}
-                DmaState::Setup => {
+                DmaState::Setup1 => {
+                    self.dma_state = DmaState::Setup2;
+                }
+                DmaState::Reset1 => {
+                    self.dma_state = DmaState::Reset2;
+                }
+                DmaState::Setup2 | DmaState::Reset2 => {
                     self.dma_slot = self.inner_read_byte(self.dma_source);
                     self.dma_state = DmaState::Active(0);
                 }
                 DmaState::Active(index) => {
                     let val = self.dma_slot;
                     self.dma_slot = self.inner_read_byte(self.dma_source + index + 1);
+                    self.gpu.write_oam(index, val);
 
-                    if index >= 160 {
+                    if index >= 159 {
                         self.dma_state = DmaState::Inactive;
                     } else {
-                        self.gpu.write_oam(index, val);
                         self.dma_state = DmaState::Active(index + 1);
                     }
                 }
@@ -195,7 +211,13 @@ impl Interconnect {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
             }
             IRAM_ECHO_START...IRAM_ECHO_END => self.internal_ram.read_byte(addr - IRAM_ECHO_START),
-            OAM_START...OAM_END => if self.dma_state != DmaState::Inactive { 0xff } else { self.gpu.read_oam(addr - OAM_START) },
+            OAM_START...OAM_END => {
+                if !(self.dma_state == DmaState::Inactive || self.dma_state == DmaState::Setup1 || self.dma_state == DmaState::Setup2) {
+                    0xff
+                } else {
+                    self.gpu.read_oam(addr - OAM_START)
+                }
+            }
             0xff00 => self.gamepad.read_reg(),
 
             // TODO - implement serial port (Link cable)
