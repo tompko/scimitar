@@ -2,12 +2,11 @@ use mem_map::*;
 use device::Device;
 use interrupt::{Irq, Interrupt};
 
-#[allow(dead_code)] // TODO - remove when the rendering is written
 const COLOUR_MAP: [u32; 4] = [0xff7e8429, 0xff527a4b, 0xff315d4b, 0xff29473e];
 const WIDTH: usize = 160;
 const HEIGHT: usize = 144;
 
-pub struct Gpu {
+pub struct Ppu {
     vram: Box<[u8]>, // VRAM - mapped to 0x8000 - 0x9FFF
     oam: Box<[u8]>, // Obj/Sprite Attribute Table - mapped to 0xfe00 - 0xfea0
     frame_buffer: Box<[u32]>,
@@ -27,9 +26,9 @@ pub struct Gpu {
     cycles: u16,
 }
 
-impl Gpu {
+impl Ppu {
     pub fn new() -> Self {
-        Gpu {
+        Ppu {
             vram: vec![0; VRAM_LENGTH as usize].into_boxed_slice(),
             oam: vec![0; OAM_LENGTH as usize].into_boxed_slice(),
             frame_buffer: vec![COLOUR_MAP[0]; WIDTH * HEIGHT].into_boxed_slice(),

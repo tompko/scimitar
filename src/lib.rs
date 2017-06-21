@@ -13,7 +13,7 @@ pub mod symbols;
 
 mod mem_map;
 mod memory;
-mod gpu;
+mod ppu;
 mod apu;
 mod timer;
 mod opcodes;

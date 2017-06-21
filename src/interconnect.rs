@@ -4,7 +4,7 @@ use mem_map::*;
 use bootrom::Bootrom;
 use cartridge::Cartridge;
 use memory::Memory;
-use gpu::Gpu;
+use ppu::Ppu;
 use device::Device;
 use apu::Apu;
 use timer::Timer;
@@ -25,7 +25,7 @@ pub enum DmaState {
 pub struct Interconnect {
     boot_rom: Bootrom,
     cartridge: Cartridge,
-    gpu: Gpu,
+    ppu: Ppu,
     apu: Apu,
     timer: Timer,
     gamepad: Gamepad,
@@ -53,7 +53,7 @@ impl Interconnect {
         Interconnect {
             boot_rom: bootrom,
             cartridge: cartridge,
-            gpu: Gpu::new(),
+            ppu: Ppu::new(),
             apu: Apu::new(),
             timer: Timer::default(),
             gamepad: Gamepad::new(),
@@ -112,7 +112,7 @@ impl Interconnect {
 
         match addr {
             ROM_START...ROM_END => self.cartridge.write(addr - ROM_START, val),
-            VRAM_START...VRAM_END => self.gpu.write_vram(addr - VRAM_START, val),
+            VRAM_START...VRAM_END => self.ppu.write_vram(addr - VRAM_START, val),
             CRAM_START...CRAM_END => self.cartridge.write(addr - ROM_START, val),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.write_byte(addr - INTERNAL_RAM_START, val)
@@ -121,7 +121,7 @@ impl Interconnect {
                 self.internal_ram.write_byte(addr - IRAM_ECHO_START, val)
             }
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.write_byte(addr - HIGH_RAM_START, val),
-            OAM_START...OAM_END => if self.dma_state != DmaState::Inactive {} else { self.gpu.write_oam(addr - OAM_START, val)},
+            OAM_START...OAM_END => if self.dma_state != DmaState::Inactive {} else { self.ppu.write_oam(addr - OAM_START, val)},
             0xff00 => self.gamepad.write_reg(val),
 
             // TODO - implement serial port (Link cable)
@@ -139,7 +139,7 @@ impl Interconnect {
                     self.dma_state = DmaState::Setup1;
                 }
             }
-            0xff40...0xff4b => self.gpu.write_reg(addr, val),
+            0xff40...0xff4b => self.ppu.write_reg(addr, val),
             0xff50 => self.boot_rom_active = false,
             0xffff => self.ie_register = val,
             _ => {} // Writes to unused addresses have no effect
@@ -163,7 +163,7 @@ impl Interconnect {
                 DmaState::Active(index) => {
                     let val = self.dma_slot;
                     self.dma_slot = self.inner_read_byte(self.dma_source + index + 1);
-                    self.gpu.write_oam(index, val);
+                    self.ppu.write_oam(index, val);
 
                     if index >= 159 {
                         self.dma_state = DmaState::Inactive;
@@ -177,7 +177,7 @@ impl Interconnect {
         let mut irq = Irq::default();
 
         self.apu.step(cycles, device, &mut irq);
-        self.gpu.step(cycles, device, &mut irq);
+        self.ppu.step(cycles, device, &mut irq);
         self.timer.step(cycles, device, &mut irq);
         self.gamepad.step(cycles, device, &mut irq);
 
@@ -190,11 +190,11 @@ impl Interconnect {
     }
 
     pub fn get_width(&self) -> usize {
-        self.gpu.get_width()
+        self.ppu.get_width()
     }
 
     pub fn get_height(&self) -> usize {
-        self.gpu.get_height()
+        self.ppu.get_height()
     }
 
     pub fn get_timer(&self) -> &Timer {
@@ -205,7 +205,7 @@ impl Interconnect {
         match addr {
             BOOT_ROM_START...BOOT_ROM_END if self.boot_rom_active => self.boot_rom.read_byte(addr - BOOT_ROM_START),
             ROM_START...ROM_END => self.cartridge.read_byte(addr - ROM_START),
-            VRAM_START...VRAM_END => self.gpu.read_vram(addr - VRAM_START),
+            VRAM_START...VRAM_END => self.ppu.read_vram(addr - VRAM_START),
             CRAM_START...CRAM_END => self.cartridge.read_byte(addr - ROM_START),
             INTERNAL_RAM_START...INTERNAL_RAM_END => {
                 self.internal_ram.read_byte(addr - INTERNAL_RAM_START)
@@ -215,7 +215,7 @@ impl Interconnect {
                 if !(self.dma_state == DmaState::Inactive || self.dma_state == DmaState::Setup1 || self.dma_state == DmaState::Setup2) {
                     0xff
                 } else {
-                    self.gpu.read_oam(addr - OAM_START)
+                    self.ppu.read_oam(addr - OAM_START)
                 }
             }
             0xff00 => self.gamepad.read_reg(),
@@ -227,7 +227,7 @@ impl Interconnect {
             0xff04...0xff07 => self.timer.read_reg(addr),
             0xff0f => self.if_register,
             0xff10...0xff3f => self.apu.read_reg(addr),
-            0xff40...0xff4f => self.gpu.read_reg(addr),
+            0xff40...0xff4f => self.ppu.read_reg(addr),
             HIGH_RAM_START...HIGH_RAM_END => self.high_ram.read_byte(addr - HIGH_RAM_START),
             0xffff => self.ie_register,
 
