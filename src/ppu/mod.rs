@@ -6,6 +6,17 @@ const COLOUR_MAP: [u32; 4] = [0xff7e8429, 0xff527a4b, 0xff315d4b, 0xff29473e];
 const WIDTH: usize = 160;
 const HEIGHT: usize = 144;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PpuState {
+    Off,
+    Setup(usize),
+    OamSearchY(usize),
+    OamSearchX(usize, u16),
+    PixelTransfer(usize),
+    HBlank(usize),
+    VBlank(usize),
+}
+
 pub struct Ppu {
     vram: Box<[u8]>, // VRAM - mapped to 0x8000 - 0x9FFF
     oam: Box<[u8]>, // Obj/Sprite Attribute Table - mapped to 0xfe00 - 0xfea0
@@ -23,6 +34,7 @@ pub struct Ppu {
     wy: u8, // 0xff4a - window Y position
     wx: u8, // 0xff4b - window X position, offset from screen coords by 7
 
+    state: PpuState,
     cycles: u16,
 }
 
@@ -45,6 +57,7 @@ impl Ppu {
             obj0_palette_data: PaletteDataReg::default(),
             obj1_palette_data: PaletteDataReg::default(),
 
+            state: PpuState::Off,
             cycles: 0,
         }
     }
@@ -84,8 +97,19 @@ impl Ppu {
 
     pub fn write_reg(&mut self, addr: u16, val: u8) {
         match addr {
-            0xff40 => self.lcd_control = val.into(),
-            0xff41 => self.lcdc_status = val.into(),
+            0xff40 => {
+                self.lcd_control = val.into();
+                if !self.lcd_control.lcd_control_op {
+                    self.state = PpuState::Off;
+                    self.cycles = 0;
+                    self.lcdc_status.mode = 2;
+                    self.ly = 0;
+                } else if self.state == PpuState::Off {
+                    // TODO - should go into setup mode
+                    self.state = PpuState::OamSearchY(0);
+                }
+            }
+            0xff41 => self.lcdc_status.set(val),
             0xff42 => self.scy = val,
             0xff43 => self.scx = val,
             0xff44 => self.ly = val,
@@ -118,57 +142,83 @@ impl Ppu {
     fn inner_step(&mut self, device: &mut Device, irq: &mut Irq) {
         self.cycles += 1;
 
-        if self.lcdc_status.mode == 2 && self.cycles == 85 {
-            // End of OAM search
-            self.lcdc_status.mode = 3;
-        } else if self.lcdc_status.mode == 3 && self.cycles == 256 {
-            // This interrupt occurs on the cycle before we switch to hblank (mode 0)
-            if self.lcdc_status.hblank_interrupt_enable {
-                irq.raise_interrupt(Interrupt::Stat);
+        match self.state {
+            PpuState::Off => unreachable!(),
+            PpuState::Setup(n) => unimplemented!(),
+            PpuState::OamSearchY(n) => {
+                self.state = PpuState::OamSearchX(n, 0);
             }
-        } else if self.lcdc_status.mode == 3 && self.cycles == 260 {
-            // TODO - this mode should have variable length
-            self.render_background();
-
-            if self.lcd_control.sprite_display {
-                self.render_sprites();
-            }
-
-            self.lcdc_status.mode = 0
-        } else if self.lcdc_status.mode == 0 && self.cycles == 456 {
-            self.ly += 1;
-            self.cycles = 0;
-
-            self.lcdc_status.coincidence_flag = self.ly == self.lyc;
-            if self.lcdc_status.coincidence_interrupt_enable && self.ly == self.lyc {
-                irq.raise_interrupt(Interrupt::Stat);
-            }
-
-            if self.ly < 144 {
-                self.lcdc_status.mode = 2;
-            } else {
-                self.lcdc_status.mode = 1;
-
-                irq.raise_interrupt(Interrupt::VBlank);
-                if self.lcdc_status.vblank_interrupt_enable {
-                    irq.raise_interrupt(Interrupt::Stat);
+            PpuState::OamSearchX(n, y) => {
+                if n == 39 {
+                    self.state = PpuState::PixelTransfer(0);
+                    self.lcdc_status.mode = 3;
+                } else {
+                    self.state = PpuState::OamSearchY(n + 1);
                 }
-
-                device.set_frame_buffer(&self.frame_buffer);
             }
-        } else if self.lcdc_status.mode == 1 {
-            if self.cycles == 456 {
-                self.cycles = 0;
-
-                if self.ly == 153 {
-                    self.lcdc_status.mode = 2;
-                    if self.lcdc_status.oam_interrupt_enable {
+            PpuState::PixelTransfer(n) => {
+                if n == 179 {
+                    if self.lcdc_status.hblank_interrupt_enable {
                         irq.raise_interrupt(Interrupt::Stat);
                     }
-                    self.ly = 0;
+
+                    self.render_background();
+
+                    if self.lcd_control.sprite_display {
+                        self.render_sprites();
+                    }
+
+                    self.lcdc_status.mode = 0;
+                    self.state = PpuState::HBlank(374 - n);
                 } else {
-                    self.ly += 1;
+                    self.state = PpuState::PixelTransfer(n + 1);
                 }
+            }
+            PpuState::HBlank(n) => {
+                if n == 0 {
+                    self.ly += 1;
+                    self.cycles = 0;
+
+                    self.lcdc_status.coincidence_flag = self.ly == self.lyc;
+                    if self.lcdc_status.coincidence_interrupt_enable && self.ly == self.lyc {
+                        irq.raise_interrupt(Interrupt::Stat);
+                    }
+
+                    if self.ly < 144 {
+                        self.lcdc_status.mode = 2;
+                        self.state = PpuState::OamSearchY(0);
+                    } else {
+                            self.state = PpuState::VBlank(0);
+                            self.lcdc_status.mode = 1;
+
+                        irq.raise_interrupt(Interrupt::VBlank);
+                        if self.lcdc_status.vblank_interrupt_enable {
+                            irq.raise_interrupt(Interrupt::Stat);
+                        }
+
+                        device.set_frame_buffer(&self.frame_buffer);
+                    }
+                } else {
+                    self.state = PpuState::HBlank(n - 1);
+                }
+            }
+            PpuState::VBlank(n) => {
+                if n == 455 {
+                    if self.ly == 153 {
+                        self.state = PpuState::OamSearchY(0);
+                        self.lcdc_status.mode = 2;
+                        if self.lcdc_status.oam_interrupt_enable {
+                            irq.raise_interrupt(Interrupt::Stat);
+                        }
+                        self.ly = 0;
+                    } else {
+                        self.state = PpuState::VBlank(0);
+                        self.ly += 1;
+                    }
+                } else {
+                    self.state = PpuState::VBlank(n + 1);
+                }
+
             }
         }
     }
@@ -350,19 +400,6 @@ impl Default for LcdcStatusReg {
     }
 }
 
-impl From<u8> for LcdcStatusReg {
-    fn from(val: u8) -> Self {
-        LcdcStatusReg {
-            coincidence_interrupt_enable: val & (1 << 6) != 0,
-            oam_interrupt_enable: val & (1 << 5) != 0,
-            vblank_interrupt_enable: val & (1 << 4) != 0,
-            hblank_interrupt_enable: val & (1 << 3) != 0,
-            coincidence_flag: val & (1 << 2) != 0,
-            mode: val & 0x3,
-        }
-    }
-}
-
 impl Into<u8> for LcdcStatusReg {
     fn into(self) -> u8 {
         let mut ret = 0x80 | self.mode;
@@ -383,6 +420,15 @@ impl Into<u8> for LcdcStatusReg {
             ret |= 1 << 2;
         }
         ret
+    }
+}
+
+impl LcdcStatusReg {
+    fn set(&mut self, val: u8) {
+        self.coincidence_interrupt_enable = val & (1 << 6) != 0;
+        self.oam_interrupt_enable = val & (1 << 5) != 0;
+        self.vblank_interrupt_enable = val & (1 << 4) != 0;
+        self.hblank_interrupt_enable = val & (1 << 3) != 0;
     }
 }
 
