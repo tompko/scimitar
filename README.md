@@ -15,7 +15,7 @@ A gameboy emulator in Rust.
 | oam bug 2    | :x:   |
 
 ## Mooneye
-Tested using master at f72ba415e1.
+Tested using master at b7858f6d71.
 
 ### Mooneye GB acceptance tests
 
@@ -72,14 +72,22 @@ Tested using master at f72ba415e1.
 | Test                        | Result |
 | --------------------------- | -------|
 | hblank ly scx timing GS     | :x:    |
-| intr 1 2 timing GS          | :x:    |
+| intr 1 2 timing GS          | :+1:   |
 | intr 2 0 timing             | :x:    |
 | intr 2 mode0 timing         | :x:    |
 | intr 2 mode0 timing sprites | :x:    |
-| intr 2 mode3 timing         | :x:    |
+| intr 2 mode3 timing         | :+1:   |
 | intr 2 oam ok timing        | :x:    |
 | stat irq blocking           | :x:    |
 | vblank stat intr GS         | :x:    |
+| lcdon timing dmgABCXmgbS    | :x:    |
+| lcdon write timing-GS       | :x:    |
+
+### Mooneye Serial
+
+| Test                       | Result |
+| -------------------------- | ------ |
+| boot sclk align dmgABCXmgb | :x:    |
 
 ### Mooneye Timer
 

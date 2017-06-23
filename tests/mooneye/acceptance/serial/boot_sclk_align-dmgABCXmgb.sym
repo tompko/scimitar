@@ -1,5 +1,5 @@
 ; this file was created with wlalink by ville helin <vhelin@iki.fi>.
-; wla symbolic information for "/home/tompko/Dev/mooneye-gb/tests/build/acceptance/boot_hwio-dmgABCXmgb.gb".
+; wla symbolic information for "/home/tompko/Dev/mooneye-gb/tests/build/acceptance/serial/boot_sclk_align-dmgABCXmgb.gb".
 
 [labels]
 01:4c01 print_load_font
@@ -189,24 +189,10 @@
 01:4bf5 _print_sl_data54
 01:4bfd _print_sl_out54
 01:4bfd __check_assert_out7
-00:01e6 _wait_ly_4
-00:01ec _wait_ly_5
-00:0202 _print_results_halt_1
-00:0206 _test_ok_cb_0
-00:020e _print_sl_data55
-00:0216 _print_sl_out55
-00:0219 mismatch
-00:023c _wait_ly_6
-00:0242 _wait_ly_7
-00:0258 _print_results_halt_2
-00:025c mismatch_cb
-00:0264 _print_sl_data56
-00:0272 _print_sl_out56
-00:028c _print_sl_data57
-00:0296 _print_sl_out57
-00:02a7 _print_sl_data58
-00:02b1 _print_sl_out58
-00:02ba hwio_data
-00:c014 mismatch_addr
-00:c016 mismatch_data
-00:c017 mismatch_mem
+00:3828 _wait_ly_4
+00:382e _wait_ly_5
+00:3844 _print_results_halt_1
+00:3848 _test_failure_cb_0
+00:3850 _print_sl_data55
+00:385f _print_sl_out55
+00:3862 test_finish
