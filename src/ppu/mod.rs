@@ -75,11 +75,19 @@ impl Ppu {
     }
 
     pub fn read_oam(&self, addr: u16) -> u8 {
-        self.oam[addr as usize]
+        // TODO - OAM is possibly available for read/write for one M-cycle at the
+        // end of mode 2
+        if self.lcdc_status.mode == 2 || self.lcdc_status.mode == 3 {
+            0xff
+        } else {
+            self.oam[addr as usize]
+        }
     }
 
     pub fn write_oam(&mut self, addr: u16, val: u8) {
-        self.oam[addr as usize] = val;
+        if self.lcdc_status.mode == 0 || self.lcdc_status.mode == 1 {
+            self.oam[addr as usize] = val;
+        }
     }
 
     pub fn read_reg(&self, addr: u16) -> u8 {
@@ -106,7 +114,7 @@ impl Ppu {
                 if !self.lcd_control.lcd_control_op {
                     self.state = PpuState::Off;
                     self.cycles = 0;
-                    self.lcdc_status.mode = 2;
+                    self.lcdc_status.mode = 0;
                     self.ly = 0;
                 } else if self.state == PpuState::Off {
                     self.state = PpuState::Setup(0);

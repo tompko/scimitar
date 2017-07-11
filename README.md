@@ -77,7 +77,7 @@ Tested using master at b7858f6d71.
 | intr 2 mode0 timing         | :+1:   |
 | intr 2 mode0 timing sprites | :x:    |
 | intr 2 mode3 timing         | :+1:   |
-| intr 2 oam ok timing        | :x:    |
+| intr 2 oam ok timing        | :+1:   |
 | stat irq blocking           | :x:    |
 | vblank stat intr GS         | :x:    |
 | lcdon timing dmgABCXmgbS    | :x:    |

@@ -75,7 +75,6 @@ fn intr_2_mode3_timing() {
 }
 
 #[test]
-#[ignore]
 fn intr_2_oam_ok_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/gpu/intr_2_oam_ok_timing.gb",
