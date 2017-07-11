@@ -172,7 +172,7 @@ impl Ppu {
                 }
             }
             PpuState::PixelTransfer(n) => {
-                if n == 179 {
+                if n == 171 {
                     if self.lcdc_status.hblank_interrupt_enable {
                         irq.raise_interrupt(Interrupt::Stat);
                     }

@@ -73,8 +73,8 @@ Tested using master at b7858f6d71.
 | --------------------------- | -------|
 | hblank ly scx timing GS     | :x:    |
 | intr 1 2 timing GS          | :+1:   |
-| intr 2 0 timing             | :x:    |
-| intr 2 mode0 timing         | :x:    |
+| intr 2 0 timing             | :+1:   |
+| intr 2 mode0 timing         | :+1:   |
 | intr 2 mode0 timing sprites | :x:    |
 | intr 2 mode3 timing         | :+1:   |
 | intr 2 oam ok timing        | :x:    |

@@ -46,7 +46,6 @@ fn intr_1_2_timing_gs() {
 }
 
 #[test]
-#[ignore]
 fn intr_2_0_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/gpu/intr_2_0_timing.gb",
@@ -54,7 +53,6 @@ fn intr_2_0_timing() {
 }
 
 #[test]
-#[ignore]
 fn intr_2_mode0_timing() {
     common::run_all_models_till_ed(
         "tests/mooneye/acceptance/gpu/intr_2_mode0_timing.gb",
