@@ -13,7 +13,7 @@ pub enum PpuState {
     OamSearchY(usize),
     OamSearchX(usize, u16),
     PixelTransfer(usize),
-    HBlank(usize),
+    HBlank,
     VBlank(usize),
 }
 
@@ -36,6 +36,9 @@ pub struct Ppu {
 
     state: PpuState,
     cycles: u16,
+    // The length of the current line in cycles.
+    // The first line after turning the lcd on is 4 cycles shorter than usual.
+    line_length: u16,
 }
 
 impl Ppu {
@@ -59,6 +62,7 @@ impl Ppu {
 
             state: PpuState::Off,
             cycles: 0,
+            line_length: 456,
         }
     }
 
@@ -105,8 +109,9 @@ impl Ppu {
                     self.lcdc_status.mode = 2;
                     self.ly = 0;
                 } else if self.state == PpuState::Off {
-                    // TODO - should go into setup mode
-                    self.state = PpuState::OamSearchY(0);
+                    self.state = PpuState::Setup(0);
+                    self.lcdc_status.mode = 0;
+                    self.line_length = 452;
                 }
             }
             0xff41 => self.lcdc_status.set(val),
@@ -141,10 +146,20 @@ impl Ppu {
 
     fn inner_step(&mut self, device: &mut Device, irq: &mut Irq) {
         self.cycles += 1;
+        self.lcdc_status.coincidence_flag = self.ly == self.lyc;
 
         match self.state {
             PpuState::Off => unreachable!(),
-            PpuState::Setup(n) => unimplemented!(),
+            PpuState::Setup(n) => {
+                if n == 77 {
+                    // This mode is 2 T-cycles shorter than a normal OAM search
+                    // which is 80 cycles
+                    self.state = PpuState::PixelTransfer(0);
+                    self.lcdc_status.mode = 3;
+                } else {
+                    self.state = PpuState::Setup(n + 1);
+                }
+            }
             PpuState::OamSearchY(n) => {
                 self.state = PpuState::OamSearchX(n, 0);
             }
@@ -169,17 +184,17 @@ impl Ppu {
                     }
 
                     self.lcdc_status.mode = 0;
-                    self.state = PpuState::HBlank(374 - n);
+                    self.state = PpuState::HBlank;
                 } else {
                     self.state = PpuState::PixelTransfer(n + 1);
                 }
             }
-            PpuState::HBlank(n) => {
-                if n == 0 {
+            PpuState::HBlank => {
+                if self.cycles == self.line_length {
                     self.ly += 1;
                     self.cycles = 0;
+                    self.line_length = 456;
 
-                    self.lcdc_status.coincidence_flag = self.ly == self.lyc;
                     if self.lcdc_status.coincidence_interrupt_enable && self.ly == self.lyc {
                         irq.raise_interrupt(Interrupt::Stat);
                     }
@@ -198,13 +213,12 @@ impl Ppu {
 
                         device.set_frame_buffer(&self.frame_buffer);
                     }
-                } else {
-                    self.state = PpuState::HBlank(n - 1);
                 }
             }
             PpuState::VBlank(n) => {
                 if n == 455 {
                     if self.ly == 153 {
+                        self.cycles = 0;
                         self.state = PpuState::OamSearchY(0);
                         self.lcdc_status.mode = 2;
                         if self.lcdc_status.oam_interrupt_enable {

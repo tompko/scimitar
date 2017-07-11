@@ -7,8 +7,21 @@ use self::gameboy::config::model::Model;
 #[test]
 #[ignore]
 fn hblank_ly_scx_timing_gs() {
-    common::run_all_models_till_ed(
+    common::run_test_till_ed(
         "tests/mooneye/acceptance/gpu/hblank_ly_scx_timing-GS.gb",
+        Model::Dmg,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/hblank_ly_scx_timing-GS.gb",
+        Model::Mgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/hblank_ly_scx_timing-GS.gb",
+        Model::Sgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/hblank_ly_scx_timing-GS.gb",
+        Model::Sgb2,
     );
 }
 
@@ -17,6 +30,18 @@ fn intr_1_2_timing_gs() {
     common::run_test_till_ed(
         "tests/mooneye/acceptance/gpu/intr_1_2_timing-GS.gb",
         Model::Dmg,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/intr_1_2_timing-GS.gb",
+        Model::Mgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/intr_1_2_timing-GS.gb",
+        Model::Sgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/intr_1_2_timing-GS.gb",
+        Model::Sgb2,
     );
 }
 
@@ -74,6 +99,18 @@ fn vblank_stat_intr_gs() {
         "tests/mooneye/acceptance/gpu/vblank_stat_intr-GS.gb",
         Model::Dmg,
     );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/vblank_stat_intr-GS.gb",
+        Model::Mgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/vblank_stat_intr-GS.gb",
+        Model::Sgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/vblank_stat_intr-GS.gb",
+        Model::Sgb2,
+    );
 }
 
 #[test]
@@ -82,7 +119,11 @@ fn lcdon_timing_dmgabcx_mgb_s() {
     common::run_test_till_ed(
         "tests/mooneye/acceptance/gpu/lcdon_timing-dmgABCXmgbS.gb",
         Model::Dmg,
-    )
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/lcdon_timing-dmgABCXmgbS.gb",
+        Model::Mgb,
+    );
 }
 
 #[test]
@@ -91,5 +132,17 @@ fn lcdon_write_timing_gs() {
     common::run_test_till_ed(
         "tests/mooneye/acceptance/gpu/lcdon_write_timing-GS.gb",
         Model::Dmg,
-    )
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/lcdon_write_timing-GS.gb",
+        Model::Mgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/lcdon_write_timing-GS.gb",
+        Model::Sgb,
+    );
+    common::run_test_till_ed(
+        "tests/mooneye/acceptance/gpu/lcdon_write_timing-GS.gb",
+        Model::Sgb2,
+    );
 }
