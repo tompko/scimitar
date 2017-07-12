@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -euox pipefail
 
 CACHED_VERSION=`cat ${HOME}/bin/wla-dx.version || true`
 
