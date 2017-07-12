@@ -20,6 +20,7 @@
 
 WLA ?= wla-gb
 WLALINK ?= wlalink
+WLAFLAGS="-DACCEPTANCE_TEST=1"
 
 BUILD_PATH := build
 

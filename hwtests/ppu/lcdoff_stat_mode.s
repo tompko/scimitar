@@ -23,17 +23,18 @@
 ;   - the PPU mode becomes 0 immediatly after the LCD is turned off
 
 ; Verified results:
-;   pass:
+;   pass: MGB, AGS
 ;   fail:
-;   untested: DMG 0, DMG, MGB, SGB, SGB2, CGB, AGB, AGS
+;   untested: DMG 0, DMG, SGB, SGB2, CGB, AGB
 
 .incdir "../common"
 .include "common.s"
 
   di
   wait_vblank
+  ld bc, STAT
   disable_lcd
-  ld a, (STAT)
+  ld a, (bc)
   and 3
   ld b, a
   enable_lcd
